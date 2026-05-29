@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, X, Calendar, TrendingUp, Edit3, Zap, RotateCcw, AlertCircle, FileText } from 'lucide-react';
+import { Check, X, Calendar, TrendingUp, Edit3, Zap, RotateCcw, AlertCircle, FileText, List, Clock, Filter } from 'lucide-react';
 
 export default function RentLedger({ 
   tenants, 
@@ -23,7 +23,12 @@ export default function RentLedger({
     { name: 'December', key: 'Dec', index: 12 },
   ];
 
-  // Modal State
+  // Layout Toggle and Filter States
+  const [viewMode, setViewMode] = useState('sheet'); // 'sheet' (Current Month Grid) or 'history' (Chronological Log)
+  const currentMonthIdx = new Date().getMonth(); // 0-11
+  const [selectedMonthKey, setSelectedMonthKey] = useState(months[currentMonthIdx].key);
+
+  // Modal Editor State
   const [activeSquare, setActiveSquare] = useState(null); 
   const [paymentStatus, setPaymentStatus] = useState('Paid'); 
   const [paidAmt, setPaidAmt] = useState('');
@@ -36,25 +41,27 @@ export default function RentLedger({
     return p ? p.name : 'Unknown Property';
   }
 
-  // Hide months prior to joining date
-  const getAvailableMonths = (moveInDateStr) => {
-    if (!moveInDateStr) return months;
+  // Check if month is available based on move-in date
+  const isMonthAvailable = (moveInDateStr, monthKey) => {
+    if (!moveInDateStr) return true;
     const parts = moveInDateStr.split('-');
-    if (parts.length < 2) return months;
+    if (parts.length < 2) return true;
     
     const moveInMonth = parseInt(parts[1], 10); 
-    return months.filter(m => m.index >= moveInMonth);
+    const monthIndex = months.find(m => m.key === monthKey)?.index || 1;
+    return monthIndex >= moveInMonth;
   };
 
-  const handleOpenSquareEditor = (tenant, month) => {
+  const handleOpenSquareEditor = (tenant, monthKey) => {
     const tenantPayments = ledger[tenant.id] || {};
-    const currentData = tenantPayments[month.key];
+    const currentData = tenantPayments[monthKey];
+    const monthName = months.find(m => m.key === monthKey)?.name || monthKey;
     
     setActiveSquare({
       tenantId: tenant.id,
       tenantName: tenant.name,
-      monthKey: month.key,
-      monthName: month.name,
+      monthKey: monthKey,
+      monthName: monthName,
       monthlyRent: tenant.rent
     });
 
@@ -122,7 +129,7 @@ export default function RentLedger({
   };
 
   // Instant single-click Automated payment
-  const handleQuickPay = (tenant, month) => {
+  const handleQuickPay = (tenant, monthKey) => {
     const todayStr = new Date().toISOString().split('T')[0];
     const details = {
       status: 'Paid',
@@ -130,40 +137,130 @@ export default function RentLedger({
       datePaid: todayStr,
       notes: 'Recorded via Quick Pay⚡'
     };
-    updatePaymentStatus(tenant.id, month.key, details);
+    updatePaymentStatus(tenant.id, monthKey, details);
   };
 
-  const handleResetMonth = (tenant, month) => {
-    const doubleCheck = window.confirm(`Reset payment logs for ${month.name}?`);
+  const handleResetMonth = (tenant, monthKey) => {
+    const monthName = months.find(m => m.key === monthKey)?.name || monthKey;
+    const doubleCheck = window.confirm(`Reset payment logs for ${tenant.name} - ${monthName}?`);
     if (doubleCheck) {
-      updatePaymentStatus(tenant.id, month.key, undefined);
+      updatePaymentStatus(tenant.id, monthKey, undefined);
     }
   };
 
-  const getRaiseHistory = (tenant) => {
-    if (tenant.rentHistory && tenant.rentHistory.length > 0) {
-      return tenant.rentHistory.map((h, idx) => ({
-        date: h.date,
-        event: h.reason || (idx === 0 ? 'Starting Rent Set' : 'Rent Adjusted'),
-        amount: `₹${h.amount}/mo`
-      }));
-    }
-    return [{
-      date: tenant.moveInDate || 'N/A',
-      event: 'Starting Rent Set',
-      amount: `₹${tenant.rent}/mo`
-    }];
+  // Extract and sort complete chronological payments logs
+  const getChronologicalHistoryList = () => {
+    const list = [];
+    tenants.forEach(tenant => {
+      const tenantPayments = ledger[tenant.id] || {};
+      Object.entries(tenantPayments).forEach(([monthKey, payData]) => {
+        if (payData) {
+          const monthName = months.find(m => m.key === monthKey)?.name || monthKey;
+          
+          let statusText = 'Paid';
+          let amountPaid = tenant.rent;
+          let paymentDateStr = tenant.moveInDate || '2026-05-29';
+          let remarks = '';
+          let remainingDue = 0;
+
+          if (typeof payData === 'string') {
+            statusText = payData;
+            if (payData === 'Unpaid') amountPaid = 0;
+          } else {
+            statusText = payData.status || 'Paid';
+            amountPaid = payData.paid !== undefined ? payData.paid : (payData.status === 'Paid' ? tenant.rent : 0);
+            paymentDateStr = payData.datePaid || tenant.moveInDate || '2026-05-29';
+            remarks = payData.notes || '';
+            remainingDue = payData.remaining || 0;
+          }
+
+          list.push({
+            id: `${tenant.id}-${monthKey}-${paymentDateStr}`,
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            propertyId: tenant.propertyId,
+            propertyName: getPropertyName(tenant.propertyId),
+            securityDeposit: tenant.securityDeposit,
+            monthKey: monthKey,
+            monthName: monthName,
+            status: statusText,
+            amountPaid: amountPaid,
+            remaining: remainingDue,
+            datePaid: paymentDateStr,
+            notes: remarks,
+            rent: tenant.rent
+          });
+        }
+      });
+    });
+
+    // Sort by payment date descending (most recent first)
+    list.sort((a, b) => new Date(b.datePaid) - new Date(a.datePaid));
+    return list;
   };
+
+  const historyLogs = getChronologicalHistoryList();
+  const selectedMonthName = months.find(m => m.key === selectedMonthKey)?.name || selectedMonthKey;
 
   return (
     <div>
+      {/* Page Header */}
       <div className="notebook-header" style={{ marginBottom: '24px' }}>
         <div>
-          <h2 className="section-title">Rent Notebook Ledger</h2>
+          <h2 className="section-title">Rent Collections Ledger</h2>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Interactive ruled ledger cards containing vertical monthly details. Click <strong>⚡ Record Full Payment</strong> to register payments instantly on today's date.
+            Grid-ruled table for monthly rents collections (Y-axis properties, X-axis payment columns) and chronological history logbook.
           </p>
         </div>
+      </div>
+
+      {/* Main View Mode Toggles */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        flexWrap: 'wrap', 
+        gap: '16px',
+        marginBottom: '24px',
+        backgroundColor: 'var(--bg-card)',
+        padding: '12px 16px',
+        borderRadius: 'var(--radius-lg)',
+        border: '1px solid var(--border-color)'
+      }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={() => setViewMode('sheet')}
+            className={`btn ${viewMode === 'sheet' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '8px 16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <List size={16} /> 🗓️ Current Month Sheet
+          </button>
+          <button 
+            onClick={() => setViewMode('history')}
+            className={`btn ${viewMode === 'history' ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '8px 16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Clock size={16} /> 📜 Chronological History Log
+          </button>
+        </div>
+
+        {viewMode === 'sheet' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-muted)' }}>Select Month:</span>
+            <select 
+              value={selectedMonthKey} 
+              onChange={(e) => setSelectedMonthKey(e.target.value)}
+              className="form-input"
+              style={{ width: '150px', padding: '6px 12px', minHeight: '34px', cursor: 'pointer' }}
+            >
+              {months.map(m => (
+                <option key={m.key} value={m.key}>
+                  {m.name} {m.key === months[currentMonthIdx].key ? '(Current)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {tenants.length === 0 ? (
@@ -175,241 +272,224 @@ export default function RentLedger({
           textAlign: 'center' 
         }}>
           <Calendar size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px', display: 'inline-block' }} />
-          <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Tenants Active</h3>
+          <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Tenants Registered</h3>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>
-            Active tenants will automatically populate the payment logbook grid cards.
+            Active tenants registered in Agreements tab will automatically populate your ledger sheets.
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          {tenants.map((tenant) => {
-            const tenantPayments = ledger[tenant.id] || {};
-            const availableMonths = getAvailableMonths(tenant.moveInDate);
-            const hadRaise = tenant.rentHistory && tenant.rentHistory.length > 1;
-            const baseRent = hadRaise ? tenant.rentHistory[0].amount : tenant.rent;
-            const raiseHistory = getRaiseHistory(tenant);
+        <div>
+          {/* VIEW 1: CURRENT MONTH SHEET GRID TABLE */}
+          {viewMode === 'sheet' && (
+            <div className="item-card" style={{ borderTop: '4px solid var(--color-primary)', padding: '24px', position: 'relative' }}>
+              <div className="card-folder-tab tab-ledger" style={{ top: '-24px', left: '-1px', height: '24px', fontSize: '0.7rem' }}>
+                🗓️ {selectedMonthName} 2026 Sheet
+              </div>
 
-            return (
-              <div key={tenant.id} className="item-card" style={{ borderTop: '4px solid var(--color-primary)', position: 'relative', padding: '24px' }}>
-                
-                {/* Visual Binder Sheet Tab */}
-                <div className="card-folder-tab tab-ledger" style={{ top: '-24px', left: '-1px', height: '24px', fontSize: '0.7rem' }}>
-                  📂 Ledger Sheet: {tenant.name}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '700' }}>
+                      <th style={{ padding: '12px' }}>🏠 Property / Home</th>
+                      <th style={{ padding: '12px' }}>👥 Active Tenant</th>
+                      <th style={{ padding: '12px' }}>💵 Rent Due</th>
+                      <th style={{ padding: '12px' }}>Status</th>
+                      <th style={{ padding: '12px' }}>Amount Paid (₹)</th>
+                      <th style={{ padding: '12px' }}>Payment Date</th>
+                      <th style={{ padding: '12px' }}>Remarks / Diary</th>
+                      <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tenants.map(tenant => {
+                      const tenantPayments = ledger[tenant.id] || {};
+                      const isAvailable = isMonthAvailable(tenant.moveInDate, selectedMonthKey);
+                      const payData = tenantPayments[selectedMonthKey];
+
+                      let statusText = 'Unmarked';
+                      let amountStr = '—';
+                      let dateStr = '—';
+                      let notesStr = '—';
+                      let statusClass = 'status-unmarked';
+
+                      if (!isAvailable) {
+                        statusText = 'Prior to Tenancy';
+                        statusClass = 'status-prior';
+                      } else if (payData) {
+                        if (typeof payData === 'string') {
+                          statusText = payData;
+                          statusClass = payData === 'Paid' ? 'status-paid' : 'status-unpaid';
+                          if (payData === 'Paid') amountStr = `₹${tenant.rent}`;
+                        } else {
+                          statusText = payData.status || 'Paid';
+                          statusClass = payData.status === 'Paid' ? 'status-paid' : payData.status === 'Unpaid' ? 'status-unpaid' : 'status-partial';
+                          
+                          if (payData.status === 'Paid') {
+                            amountStr = `₹${payData.paid || tenant.rent}`;
+                          } else if (payData.status === 'Partial') {
+                            amountStr = `₹${payData.paid} (Due: ₹${payData.remaining})`;
+                          }
+                          
+                          dateStr = payData.datePaid || '—';
+                          notesStr = payData.notes || '—';
+                        }
+                      } else {
+                        statusText = 'Pending Due';
+                        statusClass = 'status-unmarked';
+                        amountStr = `₹${tenant.rent} (Due)`;
+                      }
+
+                      return (
+                        <tr key={tenant.id} style={{ 
+                          borderBottom: '1px solid var(--border-color)', 
+                          fontSize: '0.92rem',
+                          opacity: isAvailable ? 1 : 0.5,
+                          backgroundColor: isAvailable && !payData ? 'rgba(214, 73, 51, 0.02)' : 'transparent',
+                          transition: 'var(--transition-normal)'
+                        }} className="ruled-row">
+                          <td style={{ padding: '14px 12px', fontWeight: '700', color: 'var(--text-main)' }}>
+                            🏠 {getPropertyName(tenant.propertyId)}
+                          </td>
+                          <td style={{ padding: '14px 12px', fontWeight: '600' }}>
+                            👤 {tenant.name}
+                          </td>
+                          <td style={{ padding: '14px 12px', fontWeight: '600', color: 'var(--text-muted)' }}>
+                            ₹{tenant.rent}
+                          </td>
+                          <td style={{ padding: '14px 12px' }}>
+                            <span className={`ledger-status-pill ${statusClass}`}>
+                              {statusText === 'Paid' ? '🟢 Paid' : statusText === 'Unpaid' ? '🔴 Unpaid' : statusText === 'Partial' ? '🟡 Partial' : statusText === 'Prior to Tenancy' ? 'Prior' : '🔴 Pending Due'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 12px', fontWeight: statusText === 'Paid' ? '700' : '500', color: statusText === 'Paid' ? 'var(--color-primary)' : 'var(--text-main)' }}>
+                            {amountStr}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            {dateStr}
+                          </td>
+                          <td style={{ padding: '14px 12px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: notesStr !== '—' ? 'italic' : 'normal' }}>
+                            {notesStr}
+                          </td>
+                          <td style={{ padding: '14px 12px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                              {isAvailable && (statusText === 'PendingDue' || statusText === 'Pending Due' || statusText === 'Unmarked' || statusText === 'Unpaid') && (
+                                <button 
+                                  className="btn btn-primary" 
+                                  onClick={() => handleQuickPay(tenant, selectedMonthKey)}
+                                  style={{ padding: '4px 10px', fontSize: '0.78rem', minHeight: '26px', display: 'inline-flex', alignItems: 'center', gap: '2px', backgroundColor: 'var(--color-secondary)' }}
+                                  title="Automated Single-Tap Log"
+                                >
+                                  <Zap size={12} /> Quick Pay
+                                </button>
+                              )}
+
+                              {isAvailable && (
+                                <button 
+                                  onClick={() => handleOpenSquareEditor(tenant, selectedMonthKey)}
+                                  className="icon-action-btn"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                    padding: '4px',
+                                    display: 'inline-flex'
+                                  }}
+                                  title="Open Custom Payment Editor"
+                                >
+                                  <Edit3 size={16} />
+                                </button>
+                              )}
+
+                              {isAvailable && payData && (
+                                <button 
+                                  onClick={() => handleResetMonth(tenant, selectedMonthKey)}
+                                  className="icon-action-btn"
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--color-danger)',
+                                    padding: '4px',
+                                    display: 'inline-flex'
+                                  }}
+                                  title="Reset / Unmark Month"
+                                >
+                                  <RotateCcw size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW 2: CHRONOLOGICAL STATEMENT PAYMENT HISTORY LOG */}
+          {viewMode === 'history' && (
+            <div className="item-card" style={{ borderTop: '4px solid var(--color-purple)', padding: '24px', position: 'relative' }}>
+              <div className="card-folder-tab tab-ledger" style={{ top: '-24px', left: '-1px', height: '24px', fontSize: '0.7rem', borderLeft: '3px solid var(--color-purple)' }}>
+                📜 Chronological Collection Log
+              </div>
+
+              {historyLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
+                  <AlertCircle size={32} style={{ color: 'var(--text-muted)', marginBottom: '8px', display: 'inline-block' }} />
+                  <p style={{ fontWeight: '600' }}>No Payments Logged Yet</p>
+                  <p style={{ fontSize: '0.85rem', marginTop: '2px' }}>Your logged payment history across all months will display chronologically here.</p>
                 </div>
-
-                {/* Notebook Top Page Header */}
-                <div className="property-ledger-header" style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', borderBottom: '2px solid var(--border-color)', paddingBottom: '16px', marginBottom: '16px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                      🏠 {getPropertyName(tenant.propertyId)}
-                    </h3>
-                    <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                      <span>👤 <strong>Tenant:</strong> {tenant.name}</span>
-                      <span>📅 <strong>Move-In:</strong> {tenant.moveInDate}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '24px', textAlign: 'right' }}>
-                    <div style={{ backgroundColor: 'var(--color-purple-light)', border: '1px solid rgba(176,125,98,0.15)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--color-purple)', textTransform: 'uppercase', fontWeight: '700' }}>🔒 Security Deposit</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-purple)' }}>₹{tenant.securityDeposit}</div>
-                    </div>
-                    <div style={{ backgroundColor: 'var(--color-primary-light)', border: '1px solid rgba(61,106,84,0.15)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--color-primary)', textTransform: 'uppercase', fontWeight: '700' }}>💵 Monthly Rent</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-primary)' }}>₹{tenant.rent}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {hadRaise && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <span style={{ 
-                      fontSize: '0.75rem', 
-                      color: 'var(--color-primary)', 
-                      backgroundColor: 'var(--color-primary-light)', 
-                      padding: '4px 10px', 
-                      borderRadius: '4px',
-                      fontWeight: '700',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}>
-                      📈 Rent Raised by {tenant.scheduledRaisePercent}% (From ₹{baseRent})
-                    </span>
-                  </div>
-                )}
-
-                {/* Vertical Ruled Monthly Logbook Table */}
+              ) : (
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
                     <thead>
                       <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '700' }}>
-                        <th style={{ padding: '8px 12px' }}>Month</th>
-                        <th style={{ padding: '8px 12px' }}>Status</th>
-                        <th style={{ padding: '8px 12px' }}>Amount Paid (₹)</th>
-                        <th style={{ padding: '8px 12px' }}>Payment Date</th>
-                        <th style={{ padding: '8px 12px' }}>Notes/Remarks</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right' }}>Actions</th>
+                        <th style={{ padding: '12px' }}>📅 Payment Date</th>
+                        <th style={{ padding: '12px' }}>🏠 Property</th>
+                        <th style={{ padding: '12px' }}>👤 Tenant</th>
+                        <th style={{ padding: '12px' }}>🗓️ Ledger Month</th>
+                        <th style={{ padding: '12px' }}>Rent Status</th>
+                        <th style={{ padding: '12px' }}>Amount Paid (₹)</th>
+                        <th style={{ padding: '12px' }}>Notes / remarks</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {months.map((month) => {
-                        const isAvailable = availableMonths.some(m => m.key === month.key);
-                        const payData = tenantPayments[month.key];
-                        
-                        let statusText = 'Unmarked';
-                        let amountStr = '—';
-                        let dateStr = '—';
-                        let notesStr = '—';
-                        let statusClass = 'status-unmarked';
-
-                        if (!isAvailable) {
-                          statusText = 'Prior to Tenancy';
-                          statusClass = 'status-prior';
-                        } else if (payData) {
-                          if (typeof payData === 'string') {
-                            statusText = payData;
-                            statusClass = payData === 'Paid' ? 'status-paid' : 'status-unpaid';
-                            if (payData === 'Paid') amountStr = `₹${tenant.rent}`;
-                          } else {
-                            statusText = payData.status;
-                            statusClass = payData.status === 'Paid' ? 'status-paid' : payData.status === 'Unpaid' ? 'status-unpaid' : 'status-partial';
-                            
-                            if (payData.status === 'Paid') {
-                              amountStr = `₹${payData.paid || tenant.rent}`;
-                            } else if (payData.status === 'Partial') {
-                              amountStr = `₹${payData.paid} (Due: ₹${payData.remaining})`;
-                            }
-                            
-                            dateStr = payData.datePaid || '—';
-                            notesStr = payData.notes || '—';
-                          }
-                        } else {
-                          statusText = 'Pending Due';
-                          statusClass = 'status-unmarked';
-                          amountStr = `₹${tenant.rent} (Due)`;
-                        }
-
-                        return (
-                          <tr key={month.key} style={{ 
-                            borderBottom: '1px solid var(--border-color)', 
-                            fontSize: '0.92rem',
-                            opacity: isAvailable ? 1 : 0.5,
-                            backgroundColor: isAvailable && !payData ? 'rgba(214, 73, 51, 0.02)' : 'transparent',
-                            transition: 'var(--transition-normal)'
-                          }} className="ruled-row">
-                            <td style={{ padding: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
-                              🗓️ {month.name}
-                            </td>
-                            <td style={{ padding: '12px' }}>
-                              <span className={`ledger-status-pill ${statusClass}`}>
-                                {statusText === 'Paid' ? '🟢 Paid' : statusText === 'Unpaid' ? '🔴 Unpaid' : statusText === 'Partial' ? '🟡 Partial' : statusText === 'Prior to Tenancy' ? '⚪ Prior' : '🔴 Pending Due'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px', fontWeight: statusText === 'Paid' ? '700' : '500', color: statusText === 'Paid' ? 'var(--color-primary)' : 'var(--text-main)' }}>
-                              {amountStr}
-                            </td>
-                            <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                              {dateStr}
-                            </td>
-                            <td style={{ padding: '12px', color: 'var(--text-muted)', fontStyle: notesStr !== '—' ? 'italic' : 'normal', fontSize: '0.85rem' }}>
-                              {notesStr}
-                            </td>
-                            <td style={{ padding: '12px', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
-                                {isAvailable && (statusText === 'PendingDue' || statusText === 'Pending Due' || statusText === 'Unmarked' || statusText === 'Unpaid') && (
-                                  <button 
-                                    className="btn btn-primary" 
-                                    onClick={() => handleQuickPay(tenant, month)}
-                                    style={{ padding: '4px 10px', fontSize: '0.78rem', minHeight: '26px', display: 'inline-flex', alignItems: 'center', gap: '2px', backgroundColor: 'var(--color-secondary)' }}
-                                    title="Automated Single-Tap Log"
-                                  >
-                                    <Zap size={12} /> Quick Pay
-                                  </button>
-                                )}
-
-                                {isAvailable && (
-                                  <button 
-                                    onClick={() => handleOpenSquareEditor(tenant, month)}
-                                    className="icon-action-btn"
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      color: 'var(--text-muted)',
-                                      padding: '4px',
-                                      display: 'inline-flex'
-                                    }}
-                                    title="Open Custom Payment Editor"
-                                  >
-                                    <Edit3 size={16} />
-                                  </button>
-                                )}
-
-                                {isAvailable && payData && (
-                                  <button 
-                                    onClick={() => handleResetMonth(tenant, month)}
-                                    className="icon-action-btn"
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      cursor: 'pointer',
-                                      color: 'var(--color-danger)',
-                                      padding: '4px',
-                                      display: 'inline-flex'
-                                    }}
-                                    title="Reset / Unmark month"
-                                  >
-                                    <RotateCcw size={15} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {historyLogs.map(log => (
+                        <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.92rem' }} className="ruled-row">
+                          <td style={{ padding: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
+                            {log.datePaid}
+                          </td>
+                          <td style={{ padding: '12px', fontWeight: '600' }}>
+                            {log.propertyName}
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            {log.tenantName}
+                          </td>
+                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontWeight: '600' }}>
+                            {log.monthName} 2026
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <span className={`ledger-status-pill ${log.status === 'Paid' ? 'status-paid' : log.status === 'Unpaid' ? 'status-unpaid' : 'status-partial'}`}>
+                              {log.status === 'Paid' ? '🟢 Paid' : log.status === 'Unpaid' ? '🔴 Unpaid' : '🟡 Partial'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px', fontWeight: '700', color: log.status === 'Paid' ? 'var(--color-primary)' : 'var(--text-main)' }}>
+                            ₹{log.amountPaid} {log.status === 'Partial' ? `(Due: ₹${log.remaining})` : ''}
+                          </td>
+                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: log.notes ? 'italic' : 'normal' }}>
+                            {log.notes || '—'}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-
-                {/* INLINE RENT DIARY NOTES */}
-                <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '16px', marginTop: '16px' }}>
-                  <label style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--color-secondary)', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
-                    📝 Rent Diary Notes & Remarks:
-                  </label>
-                  <textarea
-                    value={tenant.notes || ''}
-                    onChange={(e) => updateTenantNotes(tenant.id, e.target.value)}
-                    placeholder="Write logs here... (e.g. Paid online, promising balance next week)"
-                    className="diary-ruled-sheet"
-                    style={{ 
-                      width: '100%',
-                      marginTop: '6px',
-                      resize: 'vertical',
-                      minHeight: '60px'
-                    }}
-                  />
-                </div>
-
-                {/* RENT RAISE HISTORY IN CARD */}
-                <div style={{ marginTop: '16px', backgroundColor: 'var(--bg-app)', borderRadius: 'var(--radius-sm)', padding: '12px', border: '1px solid var(--border-color)' }}>
-                  <h5 style={{ fontSize: '0.8rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px', fontWeight: '700' }}>
-                    <TrendingUp size={12} style={{ color: 'var(--color-primary)' }} />
-                    Rent Rate Increase Ledger History:
-                  </h5>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {raiseHistory.map((hist, idx) => (
-                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', borderBottom: idx < raiseHistory.length - 1 ? '1px dashed var(--border-color)' : 'none', paddingBottom: '3px' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>📅 {hist.date} &mdash; {hist.event}</span>
-                        <span style={{ fontWeight: '700', color: idx > 0 ? 'var(--color-primary)' : 'var(--text-main)' }}>{hist.amount}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            );
-          })}
+              )}
+            </div>
+          )}
         </div>
       )}
 
