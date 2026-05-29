@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Home, Plus, Edit3, Trash2, AlertTriangle, X, FileText, User } from 'lucide-react';
+import { Home, Plus, Edit3, Trash2, AlertTriangle, X, FileText, User, Camera, Eye } from 'lucide-react';
 
 export default function PropertyManager({ 
   properties, 
@@ -14,29 +14,28 @@ export default function PropertyManager({
   // Form States
   const [name, setName] = useState('');
   const [address, setAddress] = useState('');
-  const [type, setType] = useState('Apartment');
-  const [rooms, setRooms] = useState('2');
+  const [rooms, setRooms] = useState('');
   const [status, setStatus] = useState('Vacant');
   
-  // Dynamic Inventory Items State
-  const [items, setItems] = useState({});
-  const [newItemName, setNewItemName] = useState('');
-  const [newItemCondition, setNewItemCondition] = useState('Perfect Condition');
+  // Appliance Images List State
+  const [images, setImages] = useState([]); // Array of { id, name, data }
+  const [applianceName, setApplianceName] = useState('');
+  const [applianceFile, setApplianceFile] = useState(null);
+  const [uploadingState, setUploadingState] = useState(false);
+
+  // Full Screen Lightbox Preview State
+  const [previewImage, setPreviewImage] = useState(null);
 
   const handleOpenAdd = () => {
     setEditingProp(null);
     setName('');
     setAddress('');
-    setType('Apartment');
-    setRooms('2');
+    setRooms('');
     setStatus('Vacant');
-    setItems({
-      'Refrigerator': 'Perfect Condition',
-      'Washing Machine': 'Perfect Condition',
-      'Air Conditioner': 'Perfect Condition'
-    });
-    setNewItemName('');
-    setNewItemCondition('Perfect Condition');
+    setImages([]);
+    setApplianceName('');
+    setApplianceFile(null);
+    setUploadingState(false);
     setIsModalOpen(true);
   };
 
@@ -44,29 +43,77 @@ export default function PropertyManager({
     setEditingProp(prop);
     setName(prop.name);
     setAddress(prop.address);
-    setType(prop.type);
-    setRooms(prop.rooms);
+    setRooms(prop.rooms || '');
     setStatus(prop.status);
-    setItems(prop.items || {});
-    setNewItemName('');
-    setNewItemCondition('Perfect Condition');
+    setImages(prop.images || []);
+    setApplianceName('');
+    setApplianceFile(null);
+    setUploadingState(false);
     setIsModalOpen(true);
+  };
+
+  // Convert uploaded image to base64 data URL
+  const handleApplianceImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      alert('⚠️ Image size too large:\n\nTo preserve local storage space, please upload appliance images smaller than 1.0 MB.');
+      e.target.value = null; // Clear input
+      return;
+    }
+
+    setApplianceFile(file);
+  };
+
+  const handleAttachApplianceImage = () => {
+    if (!applianceName.trim()) {
+      alert('Please enter an Appliance / Asset Name (e.g. Refrigerator, Air Conditioner).');
+      return;
+    }
+    if (!applianceFile) {
+      alert('Please select an image file first.');
+      return;
+    }
+
+    setUploadingState(true);
+    const reader = new FileReader();
+    reader.readAsDataURL(applianceFile);
+    reader.onload = () => {
+      const newImage = {
+        id: `img-${Date.now()}`,
+        name: applianceName.trim(),
+        data: reader.result
+      };
+
+      setImages(prev => [...prev, newImage]);
+      setApplianceName('');
+      setApplianceFile(null);
+      setUploadingState(false);
+      
+      // Clear file input manually
+      const fileInput = document.getElementById('appliance-image-input');
+      if (fileInput) fileInput.value = '';
+    };
+  };
+
+  const handleRemoveImage = (imgId) => {
+    setImages(prev => prev.filter(img => img.id !== imgId));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name.trim() || !address.trim()) {
-      alert('Please enter a Property Name and Street Address.');
+    if (!name.trim() || !address.trim() || !rooms.trim()) {
+      alert('Please fill out all required fields: Name, Address, and Room/Flat Number.');
       return;
     }
 
     const propData = {
       name: name.trim(),
       address: address.trim(),
-      type,
-      rooms: Number(rooms),
+      rooms: rooms.trim(),
       status,
-      items
+      images
     };
 
     if (editingProp) {
@@ -79,48 +126,21 @@ export default function PropertyManager({
 
   const handleDelete = (id, propName) => {
     const doubleCheck = window.confirm(
-      `⚠️ Delete Property: Are you sure you want to remove "${propName}"?\n\nThis removes all linked logs. This action cannot be undone.`
+      `⚠️ Delete Property: Are you sure you want to remove "${propName}"?\n\nThis removes all linked agreement logs. This action cannot be undone.`
     );
     if (doubleCheck) {
       deleteProperty(id);
     }
   };
 
-  const addCustomItem = () => {
-    if (!newItemName.trim()) {
-      alert('Please enter an item name.');
-      return;
-    }
-    const nameKey = newItemName.trim();
-    setItems(prev => ({
-      ...prev,
-      [nameKey]: newItemCondition
-    }));
-    setNewItemName('');
-  };
-
-  const removeCustomItem = (itemName) => {
-    setItems(prev => {
-      const copy = { ...prev };
-      delete copy[itemName];
-      return copy;
-    });
-  };
-
-  const handleItemConditionChange = (itemName, condition) => {
-    setItems(prev => ({
-      ...prev,
-      [itemName]: condition
-    }));
-  };
-
   return (
     <div>
+      {/* Header section with top-right float add property */}
       <div className="notebook-header">
         <div>
           <h2 className="section-title">Properties Registry</h2>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Register rental units, track dynamic inventory items, and review occupied tenant cards.
+            Register your active rental properties, attach appliance images, and review linked agreements.
           </p>
         </div>
         <button className="btn btn-primary" onClick={handleOpenAdd}>
@@ -139,7 +159,7 @@ export default function PropertyManager({
           <Home size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px', display: 'inline-block' }} />
           <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Properties Registered</h3>
           <p style={{ fontSize: '0.95rem', marginBottom: '20px', color: 'var(--text-muted)' }}>
-            Get started by registering your first rental home property.
+            Get started by registering your first rental property.
           </p>
           <button className="btn btn-primary" onClick={handleOpenAdd}>
             Add Your First Property
@@ -149,12 +169,13 @@ export default function PropertyManager({
         <div className="card-grid">
           {properties.map((prop) => {
             const tenant = tenants.find(t => t.propertyId === prop.id);
+            const propImages = prop.images || [];
 
             return (
               <div key={prop.id} className="item-card" style={{ borderLeft: `4px solid ${tenant ? 'var(--color-primary)' : 'var(--color-warning)'}` }}>
                 {/* Visual Notebook Filing Folder Tab */}
                 <div className={`card-folder-tab ${tenant ? 'tab-occupied' : 'tab-property'}`}>
-                  📂 {prop.type} unit
+                  🚪 Flat / Room {prop.rooms}
                 </div>
 
                 <div>
@@ -164,22 +185,19 @@ export default function PropertyManager({
                       {prop.status}
                     </span>
                   </div>
+                  
                   <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '2px', marginBottom: '12px' }}>
                     📍 {prop.address}
                   </p>
 
                   <div className="item-details-list">
                     <div className="detail-row">
-                      <span className="label">Type</span>
-                      <span className="value">{prop.type}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Rooms</span>
-                      <span className="value">{prop.rooms}</span>
+                      <span className="label">Room / Flat Number</span>
+                      <span className="value" style={{ fontWeight: '700' }}>{prop.rooms}</span>
                     </div>
                   </div>
 
-                  {/* INTEGRATED TENANT DETAILS LOGBOOK */}
+                  {/* INTEGRATED OCCUPYING TENANT DETAILS */}
                   {tenant && (
                     <div style={{ 
                       marginTop: '16px', 
@@ -202,11 +220,9 @@ export default function PropertyManager({
                       <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--text-main)' }}>
                         <div>👤 <strong>Name:</strong> {tenant.name}</div>
                         <div>📞 <strong>Phone:</strong> {tenant.phone}</div>
-                        <div>✉️ <strong>Email:</strong> {tenant.email}</div>
                         <div>📅 <strong>Move-in Date:</strong> {tenant.moveInDate}</div>
                         <div>₹ <strong>Current Rent:</strong> ₹{tenant.rent}/mo</div>
                         
-                        {/* Download Agreement File inside property card */}
                         {tenant.agreementFile && (
                           <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(16, 185, 129, 0.4)' }}>
                             <a 
@@ -229,42 +245,52 @@ export default function PropertyManager({
                     </div>
                   )}
 
-                  {/* Dynamic Items Inventory Checklist */}
+                  {/* Appliance Images preview list */}
                   <div style={{ marginTop: '16px' }}>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: '700', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px', marginBottom: '8px' }}>
-                      🏠 Appliance & Furniture Check:
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: '700', borderBottom: '1px solid #f1f5f9', paddingBottom: '4px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Camera size={15} style={{ color: 'var(--color-secondary)' }} />
+                      Registered Appliance Images:
                     </h4>
-                    {Object.keys(prop.items || {}).length === 0 ? (
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No inventory items logged. Edit to add appliances.</p>
+                    {propImages.length === 0 ? (
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No appliance images uploaded yet.</p>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {Object.entries(prop.items || {}).map(([item, condition]) => {
-                          const isRepair = condition === 'Needs Repair';
-                          const isWear = condition === 'Slight Wear';
-                          return (
-                            <div key={item} style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              fontSize: '0.85rem',
-                              alignItems: 'center' 
-                            }}>
-                              <span>{item}</span>
-                              <span style={{ 
-                                fontWeight: '600',
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                backgroundColor: isRepair ? 'var(--color-danger-light)' : isWear ? 'var(--color-warning-light)' : 'var(--color-primary-light)',
-                                color: isRepair ? 'var(--color-danger)' : isWear ? 'var(--color-warning)' : 'var(--color-primary)',
-                              }}>
-                                {condition}
-                              </span>
-                            </div>
-                          );
-                        })}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {propImages.map((img) => (
+                          <div key={img.id} style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            fontSize: '0.88rem',
+                            alignItems: 'center',
+                            backgroundColor: 'var(--bg-app)',
+                            padding: '6px 10px',
+                            borderRadius: 'var(--radius-sm)',
+                            border: '1px solid var(--border-color)'
+                          }}>
+                            <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>📷 {img.name}</span>
+                            <button
+                              onClick={() => setPreviewImage(img)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--color-secondary)',
+                                cursor: 'pointer',
+                                fontWeight: '700',
+                                fontSize: '0.82rem',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                textDecoration: 'underline'
+                              }}
+                              title={`Preview ${img.name}`}
+                            >
+                              <Eye size={12} /> View Image Preview
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
+
                 </div>
 
                 <div className="item-card-actions">
@@ -273,7 +299,7 @@ export default function PropertyManager({
                     onClick={() => handleOpenEdit(prop)}
                     style={{ flexGrow: 1 }}
                   >
-                    ✏️ Edit Property & Items
+                    ✏️ Edit Property
                   </button>
                   <button 
                     className="btn btn-danger" 
@@ -332,116 +358,103 @@ export default function PropertyManager({
 
               <div className="form-row-2">
                 <div className="form-group">
-                  <label className="form-label">Home Type</label>
-                  <select 
-                    className="form-input" 
-                    value={type} 
-                    onChange={(e) => setType(e.target.value)}
-                  >
-                    <option value="Apartment">🏢 Apartment</option>
-                    <option value="Single House">🏡 House / Villa</option>
-                    <option value="Room">🛏️ PG / Room</option>
-                    <option value="Duplex">🏠 Duplex</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Number of Rooms</label>
-                  <input 
-                    type="number" 
-                    className="form-input" 
-                    value={rooms} 
-                    onChange={(e) => setRooms(e.target.value)} 
-                    min="1" 
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Status</label>
-                <select 
-                  className="form-input" 
-                  value={status} 
-                  onChange={(e) => setStatus(e.target.value)}
-                >
-                  <option value="Vacant">🟢 Vacant</option>
-                  <option value="Occupied">🔴 Occupied</option>
-                </select>
-              </div>
-
-              {/* DYNAMIC HOUSE ITEMS CHECKLIST IN FORM */}
-              <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-                <h4 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '8px' }}>
-                  🛠️ Household Inventory Checklist
-                </h4>
-                
-                {/* Add Custom Item Inputs */}
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '8px', 
-                  marginBottom: '12px', 
-                  alignItems: 'center',
-                  backgroundColor: 'var(--bg-app)',
-                  padding: '10px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)'
-                }}>
+                  <label className="form-label">Room / Flat Number</label>
                   <input 
                     type="text" 
                     className="form-input" 
-                    placeholder="Add Custom Item (e.g. Geyser, Fan)"
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    style={{ flexGrow: 2, padding: '6px 10px', fontSize: '0.85rem' }}
+                    value={rooms} 
+                    onChange={(e) => setRooms(e.target.value)} 
+                    placeholder="e.g. Flat 301, Room 4"
+                    required
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Status</label>
                   <select 
-                    className="form-input"
-                    value={newItemCondition}
-                    onChange={(e) => setNewItemCondition(e.target.value)}
-                    style={{ flexGrow: 1, padding: '6px 10px', fontSize: '0.85rem' }}
+                    className="form-input" 
+                    value={status} 
+                    onChange={(e) => setStatus(e.target.value)}
                   >
-                    <option value="Perfect Condition">Perfect</option>
-                    <option value="Slight Wear">Slight Wear</option>
-                    <option value="Needs Repair">Needs Repair</option>
+                    <option value="Vacant">🟢 Vacant</option>
+                    <option value="Occupied">🔴 Occupied</option>
                   </select>
+                </div>
+              </div>
+
+              {/* APPLIANCE IMAGES ATTACHMENT SECTION IN FORM */}
+              <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Camera size={18} style={{ color: 'var(--color-secondary)' }} />
+                  Attach Appliance & Asset Images
+                </h4>
+                
+                {/* Upload Appliance Form inputs */}
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: '8px', 
+                  marginBottom: '12px', 
+                  backgroundColor: 'var(--bg-app)',
+                  padding: '12px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="e.g. Refrigerator, Washing Machine"
+                      value={applianceName}
+                      onChange={(e) => setApplianceName(e.target.value)}
+                      style={{ flexGrow: 1, padding: '6px 10px', fontSize: '0.85rem' }}
+                    />
+                    <input 
+                      id="appliance-image-input"
+                      type="file" 
+                      accept="image/*"
+                      className="form-input"
+                      onChange={handleApplianceImageChange}
+                      style={{ flexGrow: 1, padding: '4px 8px', fontSize: '0.85rem', cursor: 'pointer' }}
+                    />
+                  </div>
                   <button 
                     type="button" 
                     className="btn btn-primary"
-                    onClick={addCustomItem}
-                    style={{ padding: '6px 14px', fontSize: '0.85rem', minHeight: 'auto' }}
+                    onClick={handleAttachApplianceImage}
+                    disabled={uploadingState}
+                    style={{ padding: '6px 14px', fontSize: '0.85rem', minHeight: 'auto', alignSelf: 'flex-end' }}
                   >
-                    ➕ Add
+                    {uploadingState ? 'Uploading...' : '➕ Attach Asset Image'}
                   </button>
                 </div>
 
-                {/* Checklist Log List */}
+                {/* List of currently attached assets in form */}
                 <div className="inventory-list">
-                  {Object.keys(items).length === 0 ? (
+                  {images.length === 0 ? (
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '8px' }}>
-                      No inventory items currently logged. Type above to add one.
+                      No appliance images currently attached. Attach above if desired.
                     </p>
                   ) : (
-                    Object.keys(items).map((itemName) => (
-                      <div key={itemName} className="inventory-item-row">
-                        <span className="inventory-name">{itemName}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <select 
-                            className="inventory-select" 
-                            value={items[itemName]} 
-                            onChange={(e) => handleItemConditionChange(itemName, e.target.value)}
-                          >
-                            <option value="Perfect Condition">Perfect</option>
-                            <option value="Slight Wear">Slight Wear</option>
-                            <option value="Needs Repair">Needs Repair</option>
-                          </select>
+                    images.map((img) => (
+                      <div key={img.id} className="inventory-item-row">
+                        <span className="inventory-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          📷 {img.name}
+                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {/* Mini Thumbnail */}
+                          <img 
+                            src={img.data} 
+                            alt={img.name} 
+                            style={{ width: '28px', height: '28px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                          />
                           <button 
                             type="button"
                             className="btn btn-danger"
-                            onClick={() => removeCustomItem(itemName)}
+                            onClick={() => handleRemoveImage(img.id)}
                             style={{ padding: '4px 8px', fontSize: '0.75rem', minHeight: 'auto', borderRadius: '4px' }}
                           >
-                            ❌ Remove
+                            Remove
                           </button>
                         </div>
                       </div>
@@ -464,13 +477,67 @@ export default function PropertyManager({
                   className="btn btn-primary"
                   style={{ flexGrow: 1 }}
                 >
-                  Save Property
+                  Save Property Details
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* FULL SCREEN LIGHTBOX PREVIEW OVERLAY MODAL */}
+      {previewImage && (
+        <div className="modal-overlay" style={{ zIndex: 2500, backgroundColor: 'rgba(29, 36, 43, 0.85)' }} onClick={() => setPreviewImage(null)}>
+          <div className="modal-content" style={{
+            maxWidth: '90vw',
+            width: '480px',
+            padding: '24px',
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-lg)'
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1.2rem', fontWeight: '800' }}>
+                📷 Asset Preview: {previewImage.name}
+              </h3>
+              <button 
+                onClick={() => setPreviewImage(null)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              backgroundColor: '#fbfaf7', 
+              borderRadius: 'var(--radius-md)', 
+              padding: '16px', 
+              border: '1px solid var(--border-color)',
+              minHeight: '200px'
+            }}>
+              <img 
+                src={previewImage.data} 
+                alt={previewImage.name} 
+                style={{ maxWidth: '100%', maxHeight: '45vh', objectFit: 'contain', borderRadius: 'var(--radius-sm)' }}
+              />
+            </div>
+
+            <button 
+              className="btn btn-secondary" 
+              onClick={() => setPreviewImage(null)}
+              style={{ width: '100%', marginTop: '20px', fontWeight: '700' }}
+            >
+              Close Asset Preview
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
