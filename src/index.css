@@ -1,0 +1,1033 @@
+/* RentEase - Organic Mid-Century Modern Design System (Human-Designed Sidebar Light Theme) */
+
+:root {
+  /* Designer Organic Palette (Boutique Real Estate Aesthetics) */
+  --color-secondary: #cc5a37; /* Warm Terracotta / Sienna - Primary Actions */
+  --color-secondary-hover: #ab432f;
+  --color-secondary-light: rgba(204, 90, 55, 0.07);
+  --color-secondary-glow: rgba(204, 90, 55, 0.15);
+
+  --color-primary: #3d6a54; /* Sophisticated Sage Green - Paid / Rented Rents */
+  --color-primary-hover: #2d503e;
+  --color-primary-light: rgba(61, 106, 84, 0.07);
+  --color-primary-glow: rgba(61, 106, 84, 0.15);
+
+  --color-danger: #d64933; /* Rust Red - Unpaid / Terminations */
+  --color-danger-light: rgba(214, 73, 51, 0.07);
+  --color-danger-hover: #b83a26;
+  --color-danger-glow: rgba(214, 73, 51, 0.15);
+
+  --color-warning: #d4a373; /* Ochre Gold - Warnings / Repairs */
+  --color-warning-light: rgba(212, 163, 115, 0.07);
+  --color-warning-glow: rgba(212, 163, 115, 0.15);
+
+  --color-purple: #b07d62; /* Dusty Taupe / Escrow */
+  --color-purple-light: rgba(176, 125, 98, 0.07);
+
+  /* Warm Organic Alabaster Neutrals */
+  --bg-app: #fbfaf7; /* Soft organic Alabaster Cream (very comforting) */
+  --bg-card: #ffffff; /* Pure Alabaster White */
+  --bg-input: #ffffff;
+  --text-main: #1d242b; /* Deep Warm Charcoal Navy (highly professional) */
+  --text-muted: #6c7882; /* Muted Sand Gray */
+  --border-color: #eae7e1; /* Soft Cream Sand Border */
+  --border-focus: #cc5a37;
+
+  /* Typography Sizing (Sleek Clean Architectural Scale) */
+  --font-base-size: 15px;
+  --font-heading: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif;
+
+  /* Soft Organic Shadows (Warm Depth) */
+  --shadow-sm: 0 1px 2px rgba(29, 36, 43, 0.03);
+  --shadow-md: 0 4px 16px -2px rgba(29, 36, 43, 0.04), 0 2px 6px -2px rgba(29, 36, 43, 0.02);
+  --shadow-lg: 0 12px 24px -4px rgba(29, 36, 43, 0.05), 0 4px 12px -4px rgba(29, 36, 43, 0.03);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  
+  --transition-normal: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* CSS Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html, body {
+  font-family: var(--font-body);
+  font-size: var(--font-base-size);
+  line-height: 1.5;
+  color: var(--text-main);
+  background-color: var(--bg-app);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.3px;
+}
+
+p {
+  color: var(--text-muted);
+}
+
+/* -----------------------------------------
+   SaaS Layout Shell (Sticky Sidebar on Desktop)
+   ----------------------------------------- */
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Left Sidebar styling */
+.sidebar {
+  width: 260px;
+  background-color: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  flex-shrink: 0;
+}
+
+/* Main Content Workspace */
+.main-content {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 48px;
+  background-color: var(--bg-app);
+}
+
+/* Mobile elements default hidden on desktop */
+.main-header {
+  display: none;
+}
+
+.nav-mobile-bar {
+  display: none;
+}
+
+/* App Logo in Sidebar */
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-heading);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-main);
+  text-decoration: none;
+  letter-spacing: -0.5px;
+}
+
+.app-logo-span {
+  color: var(--color-secondary);
+}
+
+/* Primary/Secondary Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-family: var(--font-heading);
+  font-size: 0.92rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary {
+  background-color: var(--color-secondary);
+  color: #ffffff;
+  border: none;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-secondary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--color-secondary-glow);
+}
+
+.btn-secondary {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-app);
+  border-color: var(--text-muted);
+}
+
+.btn-danger {
+  background-color: var(--color-danger);
+  color: #ffffff;
+  border: none;
+}
+
+.btn-danger:hover {
+  background-color: var(--color-danger-hover);
+  box-shadow: 0 4px 12px var(--color-danger-glow);
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+/* Sidebar Navigation lists */
+.sidebar .nav-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 32px;
+}
+
+.sidebar .nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.98rem;
+  transition: var(--transition-normal);
+  border: 1px solid transparent;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar .nav-link:hover {
+  background-color: rgba(29, 36, 43, 0.03);
+  color: var(--text-main);
+}
+
+.sidebar .nav-link.active {
+  background-color: var(--color-secondary-light);
+  color: var(--color-secondary);
+  border: 1px solid rgba(204, 90, 55, 0.15);
+  font-weight: 700;
+}
+
+/* -----------------------------------------
+   RESPONSIVE VIEWPORT CONSTRAINTS (Mobile / Tablet)
+   ----------------------------------------- */
+@media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  /* Hide left sidebar entirely on mobile */
+  .sidebar {
+    display: none;
+  }
+
+  /* Show mobile header */
+  .main-header {
+    display: block;
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 14px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Show mobile sticky bottom nav bar */
+  .nav-mobile-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-color);
+    padding: 8px;
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+  }
+
+  .nav-mobile-bar .nav-link {
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+  }
+
+  .nav-mobile-bar .nav-link.active {
+    background-color: transparent;
+    color: var(--color-secondary);
+    font-weight: 700;
+  }
+
+  /* Main content shifts spacing on mobile to clear bottom nav */
+  .main-content {
+    padding: 24px 16px 80px 16px;
+  }
+}
+
+/* Dashboard Metrics Grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.metric-card {
+  background-color: var(--bg-card);
+  padding: 22px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: var(--transition-normal);
+}
+
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--text-muted);
+}
+
+.metric-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-emerald { 
+  background-color: var(--color-primary-light); 
+  color: var(--color-primary); 
+  border: 1px solid rgba(61, 106, 84, 0.15);
+}
+.bg-blue { 
+  background-color: var(--color-secondary-light); 
+  color: var(--color-secondary); 
+  border: 1px solid rgba(204, 90, 55, 0.15);
+}
+.bg-purple { 
+  background-color: var(--color-purple-light); 
+  color: var(--color-purple); 
+  border: 1px solid rgba(176, 125, 98, 0.15);
+}
+.bg-amber { 
+  background-color: var(--color-warning-light); 
+  color: var(--color-warning); 
+  border: 1px solid rgba(212, 163, 115, 0.15);
+}
+
+.metric-details h3 {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.metric-details .value {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+/* Organic Alerts Section */
+.alerts-section {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 32px;
+}
+
+.alerts-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.alerts-header h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--border-color);
+  background-color: var(--bg-app);
+}
+
+.alert-item.urgent { 
+  border-left-color: var(--color-danger); 
+  background-color: var(--color-danger-light);
+  border-color: rgba(214, 73, 51, 0.1);
+}
+.alert-item.info { 
+  border-left-color: var(--color-secondary); 
+  background-color: var(--color-secondary-light);
+  border-color: rgba(204, 90, 55, 0.1);
+}
+.alert-item.warning { 
+  border-left-color: var(--color-warning); 
+  background-color: var(--color-warning-light);
+  border-color: rgba(212, 163, 115, 0.1);
+}
+
+.alert-content {
+  flex-grow: 1;
+}
+
+.alert-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.alert-text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 3px 0;
+}
+
+.alert-actions {
+  margin-top: 8px;
+}
+
+/* Organic Cards (Properties & Tenants) */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 24px;
+}
+
+.item-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  transition: var(--transition-normal);
+}
+
+.item-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--text-muted);
+}
+
+.item-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.item-card-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.3px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid transparent;
+}
+
+.status-badge.occupied { 
+  background-color: var(--color-primary-light); 
+  color: var(--color-primary);
+  border-color: rgba(61, 106, 84, 0.15);
+}
+.status-badge.vacant { 
+  background-color: var(--color-warning-light); 
+  color: var(--color-warning);
+  border-color: rgba(212, 163, 115, 0.15);
+}
+
+.item-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  border-bottom: 1px solid #f5f3f0;
+  padding-bottom: 6px;
+}
+
+.detail-row .label {
+  color: var(--text-muted);
+}
+
+.detail-row .value {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.item-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Modals & Forms with Soft Organic overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(29, 36, 43, 0.4); 
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1100;
+}
+
+.modal-content {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  max-width: 550px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.form-helper {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: -3px;
+  margin-bottom: 4px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  background-color: var(--bg-card);
+  transition: var(--transition-normal);
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 3px rgba(204, 90, 55, 0.1);
+}
+
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .form-row-2 {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+/* House Items Checklist */
+.inventory-list {
+  background-color: var(--bg-app);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.inventory-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f3f0;
+  gap: 8px;
+}
+
+.inventory-item-row:last-child {
+  border-bottom: none;
+}
+
+.inventory-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.inventory-select {
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* Rent Ledger Board (Cards Checklist styling) */
+.payment-grid {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.payment-square {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition-normal);
+  background-color: var(--bg-app);
+}
+
+.payment-square .month-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.payment-square .check-icon {
+  margin-top: 1px;
+}
+
+.payment-square.paid {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.payment-square.unpaid {
+  background-color: var(--color-danger-light);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.payment-square:hover {
+  transform: translateY(-1px);
+  border-color: var(--text-main);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Rent Adjustments History Log */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.history-item {
+  font-size: 0.85rem;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-primary);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Settings View styling */
+.settings-box {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-group {
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 20px;
+}
+
+.settings-group:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.settings-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-description {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 14px;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Custom Scrollbar for sleek modern feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(29, 36, 43, 0.08);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(29, 36, 43, 0.15);
+}
+
+/* Focus outlines */
+*:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Boutique Physical Logbook & Ledger Aesthetic Enhancements
+   ========================================================================== */
+
+/* 1. Folder Index Tabs on Cards */
+.item-card {
+  position: relative;
+  margin-top: 32px !important; /* Make room for the card index folder tabs */
+  border-top-left-radius: 0px !important; /* Flat top where tab is joined */
+  box-shadow: 0 4px 12px rgba(29, 36, 43, 0.03), 0 1px 3px rgba(29, 36, 43, 0.01) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.card-folder-tab {
+  position: absolute;
+  top: -25px;
+  left: -1px;
+  height: 25px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 12px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading);
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  box-shadow: 0 -2px 4px rgba(29, 36, 43, 0.01);
+  z-index: 2;
+}
+
+.card-folder-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: var(--bg-card);
+  z-index: 3;
+}
+
+/* Tab Colors mapped to statuses/types */
+.card-folder-tab.tab-property {
+  border-left: 3px solid var(--color-warning);
+}
+.card-folder-tab.tab-occupied {
+  border-left: 3px solid var(--color-primary);
+}
+.card-folder-tab.tab-dossier {
+  border-left: 3px solid var(--color-secondary);
+}
+.card-folder-tab.tab-ledger {
+  border-left: 3px solid var(--color-purple);
+}
+
+/* 2. Lined Notebook Ruled Paper for notes */
+.diary-ruled-sheet {
+  background-color: #fcfbf8 !important; /* Warm light-cream diary sheet */
+  background-image: linear-gradient(rgba(204, 90, 55, 0.06) 1px, transparent 1px) !important;
+  background-size: 100% 24px !important;
+  line-height: 24px !important;
+  font-family: var(--font-body) !important;
+  font-size: 0.86rem !important;
+  color: #1d242b !important;
+  padding: 6px 12px 10px 12px !important;
+  border: 1px solid #eae4d7 !important;
+  border-left: 3px solid #cc5a37 !important; /* Margin vertical line */
+  border-radius: var(--radius-sm) !important;
+  min-height: 72px !important;
+}
+
+.diary-ruled-sheet:focus {
+  outline: none !important;
+  border-color: #cc5a37 !important;
+  box-shadow: 0 0 0 3px rgba(204, 90, 55, 0.08) !important;
+}
+
+/* 3. Physical Rubber Ink Stamps for checked months */
+.payment-square {
+  position: relative;
+  transition: var(--transition-normal);
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+}
+
+/* Fully Paid: Green tilted circular ink stamp */
+.payment-square.paid {
+  transform: rotate(-3deg) scale(1.02);
+  border: 2px solid var(--color-primary) !important;
+  border-radius: 50% !important; /* Ink circular seal */
+  background-color: rgba(61, 106, 84, 0.06) !important;
+  color: var(--color-primary) !important;
+  box-shadow: inset 0 0 0 1px rgba(61, 106, 84, 0.15), 0 2px 4px rgba(61, 106, 84, 0.03);
+}
+
+/* Unpaid: Red tilted rough dashed square stamp */
+.payment-square.unpaid {
+  transform: rotate(3deg) scale(1.02);
+  border: 2px dashed var(--color-danger) !important;
+  border-radius: 8px !important;
+  background-color: rgba(214, 73, 51, 0.06) !important;
+  color: var(--color-danger) !important;
+  box-shadow: 0 2px 4px rgba(214, 73, 51, 0.03);
+}
+
+/* Partial: Golden tilted dotted circular stamp */
+.payment-square.partial-stamp {
+  transform: rotate(-1deg) scale(1.02);
+  border: 2px dotted var(--color-warning) !important;
+  border-radius: 6px !important;
+  background-color: rgba(212, 163, 115, 0.06) !important;
+  color: var(--color-warning) !important;
+  box-shadow: 0 2px 4px rgba(212, 163, 115, 0.03);
+}
+
+.payment-square:hover {
+  transform: scale(1.08) translateY(-2px) !important;
+  z-index: 5;
+  box-shadow: var(--shadow-md) !important;
+}
+
+/* 4. Luxury Wax Seal Active badge for Agreements */
+.wax-seal-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.wax-seal-badge {
+  width: 42px;
+  height: 42px;
+  background-color: #cc5a37; /* Crimson Terracotta wax */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.2), 0 4px 8px rgba(204, 90, 55, 0.2);
+  border: 2px solid #ab432f;
+  flex-shrink: 0;
+  transform: rotate(-4deg);
+}
+
+.wax-seal-badge::before {
+  content: '✓';
+  color: #fbfaf7;
+  font-family: var(--font-heading);
+  font-weight: 900;
+  font-size: 1.25rem;
+  text-shadow: 0 -1px 2px rgba(0,0,0,0.5);
+  display: block;
+  margin-top: -2px;
+}
+
+.wax-seal-badge::after {
+  content: 'SIGNED';
+  position: absolute;
+  font-size: 0.42rem;
+  font-weight: 800;
+  color: rgba(251, 250, 247, 0.7);
+  bottom: 4px;
+  letter-spacing: 0.5px;
+  text-shadow: 0 -1px 1px rgba(0,0,0,0.4);
+}
+
+/* 5. Bookbinding Sewn Stitch Line */
+.book-stitch-line {
+  border-right: 2px dashed rgba(29, 36, 43, 0.12);
+  position: relative;
+}
+
+.book-stitch-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  width: 1px;
+  background-color: var(--border-color);
+}
+
+/* Add stylish stitching on the desktop sidebar */
+.sidebar {
+  border-right: 2px dashed rgba(29, 36, 43, 0.08) !important;
+  box-shadow: inset -6px 0 12px rgba(29, 36, 43, 0.01) !important;
+}
+
+/* Notebook Header with double-line rule */
+.notebook-header {
+  border-bottom: 3px double var(--border-color);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
