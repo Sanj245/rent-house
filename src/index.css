@@ -1126,12 +1126,40 @@ p {
 }
 
 /* Icon action button hover effects */
-.icon-action-btn {
-  border-radius: 6px;
-  transition: all 0.18s ease;
-}
 .icon-action-btn:hover {
   background-color: rgba(29, 36, 43, 0.05) !important;
   transform: translateY(-1px);
+}
+
+/* Swipable months selector bar for mobile and desktop */
+.months-horizontal-container {
+  display: flex !important;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 24px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.months-horizontal-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.months-horizontal-container::-webkit-scrollbar-thumb {
+  background: rgba(29, 36, 43, 0.08);
+  border-radius: 2px;
+}
+
+.month-pill-btn {
+  flex: 0 0 auto;
+  min-width: 85px;
+}
+
+.month-pill-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md) !important;
+}
+.month-pill-btn.active:hover {
+  background-color: var(--color-secondary-hover) !important;
 }
 
