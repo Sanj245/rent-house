@@ -43,7 +43,7 @@ export default function PropertyManager({
     setEditingProp(prop);
     setName(prop.name);
     setAddress(prop.address);
-    setRooms(prop.rooms || '');
+    setRooms(prop.rooms !== undefined && prop.rooms !== null ? prop.rooms.toString() : '');
     setStatus(prop.status);
     setImages(prop.images || []);
     setApplianceName('');
@@ -103,7 +103,7 @@ export default function PropertyManager({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name.trim() || !address.trim() || !rooms.trim()) {
+    if (!name.trim() || !address.trim() || !String(rooms).trim()) {
       alert('Please fill out all required fields: Name, Address, and Room/Flat Number.');
       return;
     }
@@ -111,7 +111,7 @@ export default function PropertyManager({
     const propData = {
       name: name.trim(),
       address: address.trim(),
-      rooms: rooms.trim(),
+      rooms: String(rooms).trim(),
       status,
       images
     };
