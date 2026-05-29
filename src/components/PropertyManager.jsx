@@ -30,7 +30,7 @@ export default function PropertyManager({
     setEditingProp(null);
     setName('');
     setAddress('');
-    setRooms('');
+    setRooms('2');
     setStatus('Vacant');
     setImages([]);
     setApplianceName('');
@@ -104,15 +104,19 @@ export default function PropertyManager({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim() || !address.trim() || !String(rooms).trim()) {
-      alert('Please fill out all required fields: Name, Address, and Room/Flat Number.');
+      alert('Please fill out all required fields: Name, Address, and Number of Rooms.');
       return;
     }
+
+    // Automatically determine status based on active tenant agreements
+    const hasTenant = tenants.some(t => t.propertyId === (editingProp ? editingProp.id : ''));
+    const propStatus = hasTenant ? 'Occupied' : 'Vacant';
 
     const propData = {
       name: name.trim(),
       address: address.trim(),
       rooms: String(rooms).trim(),
-      status,
+      status: propStatus,
       images
     };
 
@@ -175,14 +179,14 @@ export default function PropertyManager({
               <div key={prop.id} className="item-card" style={{ borderLeft: `4px solid ${tenant ? 'var(--color-primary)' : 'var(--color-warning)'}` }}>
                 {/* Visual Notebook Filing Folder Tab */}
                 <div className={`card-folder-tab ${tenant ? 'tab-occupied' : 'tab-property'}`}>
-                  🚪 Flat / Room {prop.rooms}
+                  🚪 {prop.rooms} BHK / Rooms
                 </div>
 
                 <div>
                   <div className="item-card-header" style={{ marginTop: '4px' }}>
                     <div className="item-card-title">{prop.name}</div>
-                    <span className={`status-badge ${prop.status.toLowerCase()}`}>
-                      {prop.status}
+                    <span className={`status-badge ${tenant ? 'occupied' : 'vacant'}`}>
+                      {tenant ? '🟢 Occupied' : '⚪ Vacant'}
                     </span>
                   </div>
                   
@@ -192,8 +196,8 @@ export default function PropertyManager({
 
                   <div className="item-details-list">
                     <div className="detail-row">
-                      <span className="label">Room / Flat Number</span>
-                      <span className="value" style={{ fontWeight: '700' }}>{prop.rooms}</span>
+                      <span className="label">Number of Rooms</span>
+                      <span className="value" style={{ fontWeight: '700' }}>{prop.rooms} Rooms</span>
                     </div>
                   </div>
 
@@ -356,30 +360,17 @@ export default function PropertyManager({
                 />
               </div>
 
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label className="form-label">Room / Flat Number</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    value={rooms} 
-                    onChange={(e) => setRooms(e.target.value)} 
-                    placeholder="e.g. Flat 301, Room 4"
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Status</label>
-                  <select 
-                    className="form-input" 
-                    value={status} 
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    <option value="Vacant">🟢 Vacant</option>
-                    <option value="Occupied">🔴 Occupied</option>
-                  </select>
-                </div>
+              <div className="form-group">
+                <label className="form-label">Number of Rooms</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  value={rooms} 
+                  onChange={(e) => setRooms(e.target.value)} 
+                  placeholder="e.g. 2, 3"
+                  min="1"
+                  required
+                />
               </div>
 
               {/* APPLIANCE IMAGES ATTACHMENT SECTION IN FORM */}
