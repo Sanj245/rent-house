@@ -224,9 +224,9 @@ export default function RentLedger({
       {/* Page Header */}
       <div className="notebook-header" style={{ marginBottom: '16px' }}>
         <div>
-          <h2 className="section-title">Rent Collections Ledger</h2>
+          <h2 className="section-title">Monthly Rent Ledger</h2>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            A tactile grid spreadsheet logging active properties (Y-axis) and payment parameters (X-axis) for the chosen month.
+            Track monthly rent payments, log payment methods, who collected the rent, and monitor automatic increases.
           </p>
         </div>
       </div>
@@ -271,24 +271,58 @@ export default function RentLedger({
         <div key={idx} style={{
           backgroundColor: 'var(--color-primary-light)',
           border: '1px solid var(--color-primary)',
+          borderLeft: '5px solid var(--color-primary)',
           borderRadius: 'var(--radius-lg)',
-          padding: '16px',
-          marginBottom: '20px',
+          padding: '18px 20px',
+          marginBottom: '24px',
           display: 'flex',
-          gap: '12px',
-          alignItems: 'flex-start',
-          boxShadow: 'var(--shadow-sm)'
+          gap: '16px',
+          alignItems: 'center',
+          boxShadow: 'var(--shadow-sm)',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap'
         }}>
-          <TrendingUp size={20} style={{ color: 'var(--color-primary)', marginTop: '2px', flexShrink: 0 }} />
-          <div>
-            <div style={{ fontWeight: '700', fontSize: '0.95rem', color: 'var(--text-main)' }}>
-              📈 Rent Increase Active this Month ({selectedMonthName})
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+            <TrendingUp size={24} style={{ color: 'var(--color-primary)', marginTop: '2px', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--text-main)' }}>
+                📈 Rent Increase Active this Month ({selectedMonthName})
+              </div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                An automatic <strong>{raise.percent}%</strong> raise is now active for <strong>{raise.tenantName}</strong> at <strong>{raise.propertyName}</strong>.
+                <br />
+                Effective date: {raise.effectiveDate}.
+              </div>
             </div>
-            <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: '1.4' }}>
-              An automatic <strong>{raise.percent}%</strong> rent increase has taken effect for <strong>{raise.tenantName}</strong> occupying <strong>{raise.propertyName}</strong> starting this month.
-              <br />
-              Monthly rent is now adjusted from <strong>₹{raise.oldRent}</strong> to <strong>₹{raise.newRent}</strong> effective {raise.effectiveDate}.
-            </div>
+          </div>
+
+          {/* Highly Visual Rent Rate Badges */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px', 
+            backgroundColor: '#ffffff', 
+            padding: '8px 16px', 
+            borderRadius: 'var(--radius-md)', 
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
+              ₹{raise.oldRent}
+            </span>
+            <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--color-primary)' }}>
+              ➡️ ₹{raise.newRent}
+            </span>
+            <span style={{ 
+              fontSize: '0.72rem', 
+              backgroundColor: 'var(--color-primary-light)', 
+              color: 'var(--color-primary)', 
+              padding: '2px 8px', 
+              borderRadius: '4px',
+              fontWeight: '800'
+            }}>
+              +{raise.percent}%
+            </span>
           </div>
         </div>
       ))}
