@@ -16,6 +16,8 @@ export default function PropertyManager({
   const [address, setAddress] = useState('');
   const [rooms, setRooms] = useState('');
   const [status, setStatus] = useState('Vacant');
+  const [isCashOnly, setIsCashOnly] = useState(true);
+  const [accountName, setAccountName] = useState('');
   
   // Appliance Images List State
   const [images, setImages] = useState([]); // Array of { id, name, data }
@@ -36,6 +38,8 @@ export default function PropertyManager({
     setApplianceName('');
     setApplianceFile(null);
     setUploadingState(false);
+    setIsCashOnly(true);
+    setAccountName('');
     setIsModalOpen(true);
   };
 
@@ -49,6 +53,8 @@ export default function PropertyManager({
     setApplianceName('');
     setApplianceFile(null);
     setUploadingState(false);
+    setIsCashOnly(prop.isCashOnly !== undefined ? prop.isCashOnly : true);
+    setAccountName(prop.accountName || '');
     setIsModalOpen(true);
   };
 
@@ -117,7 +123,9 @@ export default function PropertyManager({
       address: address.trim(),
       rooms: String(rooms).trim(),
       status: propStatus,
-      images
+      images,
+      isCashOnly,
+      accountName: isCashOnly ? 'None' : (accountName.trim() || 'None')
     };
 
     if (editingProp) {
@@ -198,6 +206,13 @@ export default function PropertyManager({
                     <div className="detail-row">
                       <span className="label">Number of Rooms</span>
                       <span className="value" style={{ fontWeight: '700' }}>{prop.rooms} Rooms</span>
+                    </div>
+
+                    <div className="detail-row">
+                      <span className="label">Payment Channel</span>
+                      <span className="value" style={{ fontWeight: '600', color: prop.isCashOnly ? 'var(--color-warning)' : 'var(--color-primary)' }}>
+                        {prop.isCashOnly ? '💵 Cash Default' : `🏦 Account: ${prop.accountName || 'None'}`}
+                      </span>
                     </div>
                   </div>
 
@@ -297,7 +312,7 @@ export default function PropertyManager({
 
                 </div>
 
-                <div className="item-card-actions">
+                <div className="item-card-actions" style={{ marginTop: '16px' }}>
                   <button 
                     className="btn btn-secondary" 
                     onClick={() => handleOpenEdit(prop)}
@@ -373,8 +388,50 @@ export default function PropertyManager({
                 />
               </div>
 
+              {/* PAYMENT ACCOUNT CONFIGURATION SUB-FORM */}
+              <div style={{ marginTop: '20px', marginBottom: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  💳 Rent Payment Preferences
+                </h4>
+                
+                <div className="form-group">
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                    <input 
+                      type="checkbox" 
+                      checked={isCashOnly} 
+                      onChange={(e) => {
+                        setIsCashOnly(e.target.checked);
+                        if (e.target.checked) setAccountName('');
+                      }}
+                      style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-secondary)' }}
+                    />
+                    <span>Is rent payment done by cash?</span>
+                  </label>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px', marginLeft: '26px' }}>
+                    If checked, quick log actions will default to Cash and "Received By" defaults to "Landlord".
+                  </p>
+                </div>
+
+                {!isCashOnly && (
+                  <div className="form-group" style={{ marginLeft: '26px' }}>
+                    <label className="form-label">Default Transfer Account Name</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={accountName}
+                      onChange={(e) => setAccountName(e.target.value)}
+                      placeholder="e.g. SBI - Sanjana, Rent Account, SBI Account"
+                      required={!isCashOnly}
+                    />
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Provides pre-fill options for the ledger sheet. Write "None" or leave empty to default back to "Landlord".
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* APPLIANCE IMAGES ATTACHMENT SECTION IN FORM */}
-              <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+              <div style={{ marginTop: '20px', marginBottom: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
                 <h4 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Camera size={18} style={{ color: 'var(--color-secondary)' }} />
                   Attach Appliance & Asset Images

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, X, Calendar, TrendingUp, Edit3, RotateCcw, AlertCircle, FileText, Info, ArrowUpRight } from 'lucide-react';
+import { Check, X, Calendar, TrendingUp, Edit3, Zap, RotateCcw, AlertCircle, FileText, Info } from 'lucide-react';
 
 export default function RentLedger({ 
   tenants, 
@@ -8,7 +8,7 @@ export default function RentLedger({
   updatePaymentStatus,
   updateTenantNotes 
 }) {
-  const months = [
+  const monthsBase = [
     { name: 'January', key: 'Jan', index: 1 },
     { name: 'February', key: 'Feb', index: 2 },
     { name: 'March', key: 'Mar', index: 3 },
@@ -23,13 +23,19 @@ export default function RentLedger({
     { name: 'December', key: 'Dec', index: 12 },
   ];
 
-  // Month selector row state
-  const currentMonthIdx = new Date().getMonth(); // 0-11
-  const [selectedMonthKey, setSelectedMonthKey] = useState(months[currentMonthIdx].key);
+  // Years configured
+  const yearsList = [2026, 2027, 2028];
 
-  // Modal Editor States
+  // Selected timeline state (defaults to current calendar month & year, e.g. May-2026)
+  const today = new Date();
+  const currentMonthKey = monthsBase[today.getMonth()].key;
+  const currentYear = today.getFullYear(); // 2026
+  const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${currentMonthKey}-${currentYear}`);
+
+  // Custom Payment Modal Editor States
   const [activeSquare, setActiveSquare] = useState(null); 
   const [paymentStatus, setPaymentStatus] = useState('Paid'); 
+  const [customRentDue, setCustomRentDue] = useState('');
   const [paidAmt, setPaidAmt] = useState('');
   const [remainingAmt, setRemainingAmt] = useState('');
   const [paymentDate, setPaymentDate] = useState('');
@@ -42,17 +48,52 @@ export default function RentLedger({
     return p ? p.name : 'Unknown Property';
   }
 
-  // Dynamic Rent Calculation for the selected month (pre-increase vs post-increase rent rate)
-  const getRentForMonth = (tenant, monthKey) => {
-    const monthIndex = months.find(m => m.key === monthKey)?.index || 12;
+  // Look up property payment preference configuration (Cash Preference & Receiving Account)
+  const getPropertyPaymentConfig = (propertyId) => {
+    const prop = properties.find(p => p.id === propertyId);
+    if (!prop) return { isCash: true, account: 'Landlord' };
+
+    const isCash = prop.isCashOnly !== undefined ? prop.isCashOnly : true;
+    const account = prop.accountName && prop.accountName !== 'None' && prop.accountName.trim() !== '' ? prop.accountName.trim() : 'Landlord';
+    return { isCash, account };
+  };
+
+  // Get Payment Data (Backward compatible with old database month formats e.g. "May" mapped to "May-2026")
+  const getPaymentData = (tenantPayments, monthKey, year) => {
+    const timelineKey = `${monthKey}-${year}`;
+    if (tenantPayments[timelineKey] !== undefined) {
+      return tenantPayments[timelineKey];
+    }
+    if (year === 2026 && tenantPayments[monthKey] !== undefined) {
+      return tenantPayments[monthKey];
+    }
+    return undefined;
+  };
+
+  // Dynamic Rent Calculation for the selected month using absolute month index formula
+  const getRentForMonth = (tenant, timelineKey) => {
+    // 1. First check if a manual rent due override is saved in ledger!
+    const tenantPayments = ledger[tenant.id] || {};
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const year = parseInt(yearStr, 10);
+    const payData = getPaymentData(tenantPayments, monthKey, year);
+    if (payData && typeof payData === 'object' && payData.rentDue !== undefined) {
+      return payData.rentDue;
+    }
+
+    const monthIndex = monthsBase.find(m => m.key === monthKey)?.index || 12;
+    const selectedAbsoluteIndex = (year - 2026) * 12 + monthIndex;
     
     if (tenant.scheduledRaiseEffectiveDate) {
       const parts = tenant.scheduledRaiseEffectiveDate.split('-');
       if (parts.length >= 2) {
+        const raiseYear = parseInt(parts[0], 10);
         const raiseMonth = parseInt(parts[1], 10);
+        const raiseAbsoluteIndex = (raiseYear - 2026) * 12 + raiseMonth;
+        
         const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
         
-        if (monthIndex < raiseMonth) {
+        if (selectedAbsoluteIndex < raiseAbsoluteIndex) {
           // Month prior to scheduled increase
           return baseRent;
         } else {
@@ -67,31 +108,43 @@ export default function RentLedger({
   };
 
   // Check if month is available based on move-in date
-  const isMonthAvailable = (moveInDateStr, monthKey) => {
+  const isMonthAvailable = (moveInDateStr, timelineKey) => {
     if (!moveInDateStr) return true;
     const parts = moveInDateStr.split('-');
     if (parts.length < 2) return true;
     
-    const moveInMonth = parseInt(parts[1], 10); 
-    const monthIndex = months.find(m => m.key === monthKey)?.index || 1;
-    return monthIndex >= moveInMonth;
+    const moveInYear = parseInt(parts[0], 10);
+    const moveInMonth = parseInt(parts[1], 10);
+    const moveInAbsoluteIndex = (moveInYear - 2026) * 12 + moveInMonth;
+    
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIndex = monthsBase.find(m => m.key === monthKey)?.index || 1;
+    const selectedAbsoluteIndex = (year - 2026) * 12 + monthIndex;
+    
+    return selectedAbsoluteIndex >= moveInAbsoluteIndex;
   };
 
-  const handleOpenSquareEditor = (tenant, monthKey) => {
+  const handleOpenSquareEditor = (tenant, timelineKey) => {
     const tenantPayments = ledger[tenant.id] || {};
-    const currentData = tenantPayments[monthKey];
-    const monthName = months.find(m => m.key === monthKey)?.name || monthKey;
-    const computedRent = getRentForMonth(tenant, monthKey);
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const year = parseInt(yearStr, 10);
+    
+    const currentData = getPaymentData(tenantPayments, monthKey, year);
+    const monthName = monthsBase.find(m => m.key === monthKey)?.name || monthKey;
+    const computedRent = getRentForMonth(tenant, timelineKey);
     
     setActiveSquare({
       tenantId: tenant.id,
       tenantName: tenant.name,
-      monthKey: monthKey,
-      monthName: monthName,
+      monthKey: timelineKey, // We store the timelineKey directly in database
+      monthName: `${monthName} ${year}`,
       monthlyRent: computedRent
     });
 
+    setCustomRentDue(computedRent.toString());
     const todayStr = new Date().toISOString().split('T')[0];
+    const { isCash, account } = getPropertyPaymentConfig(tenant.propertyId);
 
     if (currentData) {
       if (typeof currentData === 'string') {
@@ -99,16 +152,16 @@ export default function RentLedger({
         setPaidAmt(currentData === 'Paid' ? computedRent.toString() : '');
         setRemainingAmt('');
         setPaymentDate(todayStr);
-        setPaymentMethod('UPI');
-        setReceivedBy('Landlord');
+        setPaymentMethod(isCash ? 'Cash' : 'UPI');
+        setReceivedBy(account);
         setPaymentNotes('');
       } else {
         setPaymentStatus(currentData.status || 'Paid');
         setPaidAmt(currentData.paid ? currentData.paid.toString() : (currentData.status === 'Paid' ? computedRent.toString() : ''));
         setRemainingAmt(currentData.remaining ? currentData.remaining.toString() : '');
         setPaymentDate(currentData.datePaid || todayStr);
-        setPaymentMethod(currentData.paymentMethod || 'UPI');
-        setReceivedBy(currentData.receivedBy || 'Landlord');
+        setPaymentMethod(currentData.paymentMethod || (isCash ? 'Cash' : 'UPI'));
+        setReceivedBy(currentData.receivedBy || account);
         setPaymentNotes(currentData.notes || '');
       }
     } else {
@@ -116,8 +169,8 @@ export default function RentLedger({
       setPaidAmt('');
       setRemainingAmt('');
       setPaymentDate(todayStr);
-      setPaymentMethod('UPI');
-      setReceivedBy('Landlord');
+      setPaymentMethod(isCash ? 'Cash' : 'UPI');
+      setReceivedBy(account);
       setPaymentNotes('');
     }
   };
@@ -127,10 +180,13 @@ export default function RentLedger({
     if (!activeSquare) return;
 
     let details;
+    const finalRentDue = Number(customRentDue) || activeSquare.monthlyRent;
+
     if (paymentStatus === 'Paid') {
       details = { 
         status: 'Paid',
-        paid: Number(paidAmt) || activeSquare.monthlyRent,
+        rentDue: finalRentDue,
+        paid: Number(paidAmt) || finalRentDue,
         datePaid: paymentDate || new Date().toISOString().split('T')[0],
         paymentMethod: paymentMethod,
         receivedBy: receivedBy.trim() || 'Landlord',
@@ -139,6 +195,7 @@ export default function RentLedger({
     } else if (paymentStatus === 'Unpaid') {
       details = { 
         status: 'Unpaid',
+        rentDue: finalRentDue,
         datePaid: '',
         paymentMethod: '—',
         receivedBy: receivedBy.trim() || 'Landlord',
@@ -151,6 +208,7 @@ export default function RentLedger({
       }
       details = { 
         status: 'Partial', 
+        rentDue: finalRentDue,
         paid: Number(paidAmt), 
         remaining: Number(remainingAmt),
         datePaid: paymentDate || new Date().toISOString().split('T')[0],
@@ -159,7 +217,10 @@ export default function RentLedger({
         notes: paymentNotes || ''
       };
     } else {
-      details = undefined; 
+      details = {
+        status: 'Unmarked',
+        rentDue: finalRentDue
+      }; 
     }
 
     updatePaymentStatus(activeSquare.tenantId, activeSquare.monthKey, details);
@@ -167,40 +228,50 @@ export default function RentLedger({
   };
 
   // Instant single-click Automated status updates (Paid or Unpaid)
-  const handleMarkPaid = (tenant, monthKey) => {
+  const handleMarkPaid = (tenant, timelineKey) => {
     const todayStr = new Date().toISOString().split('T')[0];
-    const rentAmount = getRentForMonth(tenant, monthKey);
+    const rentAmount = getRentForMonth(tenant, timelineKey);
+    const { isCash, account } = getPropertyPaymentConfig(tenant.propertyId);
+
     const details = {
       status: 'Paid',
+      rentDue: rentAmount,
       paid: rentAmount,
       datePaid: todayStr,
-      paymentMethod: 'Cash',
-      receivedBy: 'Landlord',
+      paymentMethod: isCash ? 'Cash' : 'UPI', // Default based on property config
+      receivedBy: account, // Default to property account name or "Landlord"
       notes: 'Quick logged as Paid'
     };
-    updatePaymentStatus(tenant.id, monthKey, details);
+    updatePaymentStatus(tenant.id, timelineKey, details);
   };
 
-  const handleMarkUnpaid = (tenant, monthKey) => {
-    const doubleCheck = window.confirm(`Mark ${tenant.name}'s rent as Unpaid?`);
+  const handleMarkUnpaid = (tenant, timelineKey) => {
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const monthName = monthsBase.find(m => m.key === monthKey)?.name || monthKey;
+    
+    const doubleCheck = window.confirm(`Reset payment logs for ${tenant.name} - ${monthName} ${yearStr}?`);
     if (doubleCheck) {
-      updatePaymentStatus(tenant.id, monthKey, undefined);
+      updatePaymentStatus(tenant.id, timelineKey, undefined);
     }
   };
 
-  // Calculate active raises for the selected month
+  // Calculate active raises for the selected timeline key
   const getActiveRaisesForSelectedMonth = () => {
     const activeList = [];
+    const [selectedMonthKey, selectedYearStr] = selectedTimelineKey.split('-');
+    const selectedYear = parseInt(selectedYearStr, 10);
+    
     tenants.forEach(t => {
       if (t.scheduledRaiseEffectiveDate) {
         const parts = t.scheduledRaiseEffectiveDate.split('-');
         if (parts.length >= 2) {
+          const raiseYear = parseInt(parts[0], 10);
           const raiseMonth = parseInt(parts[1], 10);
-          const selectedIndex = months.find(m => m.key === selectedMonthKey)?.index || 12;
+          const raiseMonthKey = monthsBase.find(m => m.index === raiseMonth)?.key || '';
           
-          if (selectedIndex === raiseMonth) {
+          if (selectedMonthKey === raiseMonthKey && selectedYear === raiseYear) {
             const baseRent = t.rentHistory && t.rentHistory[0] ? Number(t.rentHistory[0].amount) : Number(t.rent);
-            const raisedRent = getRentForMonth(t, selectedMonthKey);
+            const raisedRent = getRentForMonth(t, selectedTimelineKey);
             activeList.push({
               tenantName: t.name,
               propertyName: getPropertyName(t.propertyId),
@@ -217,7 +288,8 @@ export default function RentLedger({
   };
 
   const activeRaises = getActiveRaisesForSelectedMonth();
-  const selectedMonthName = months.find(m => m.key === selectedMonthKey)?.name || selectedMonthKey;
+  const [selMonth, selYear] = selectedTimelineKey.split('-');
+  const displayActiveMonthName = `${monthsBase.find(m => m.key === selMonth)?.name} ${selYear}`;
 
   return (
     <div>
@@ -231,39 +303,82 @@ export default function RentLedger({
         </div>
       </div>
 
-      {/* Tactile Shadowed Month Selector Row */}
+      {/* Tactile Horizontal Swipable Multi-Year Month Selector Row */}
       <div className="months-horizontal-container" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-        gap: '10px',
-        marginBottom: '24px'
+        display: 'flex',
+        gap: '12px',
+        overflowX: 'auto',
+        paddingBottom: '12px',
+        marginBottom: '24px',
+        alignItems: 'center',
+        WebkitOverflowScrolling: 'touch',
+        borderBottom: '1px dashed var(--border-color)'
       }}>
-        {months.map(m => {
-          const isActive = m.key === selectedMonthKey;
-          return (
-            <button
-              key={m.key}
-              onClick={() => setSelectedMonthKey(m.key)}
-              className={`month-pill-btn ${isActive ? 'active' : ''}`}
-              style={{
-                fontFamily: 'var(--font-heading)',
-                fontWeight: '700',
-                fontSize: '0.88rem',
-                padding: '12px 8px',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                cursor: 'pointer',
-                backgroundColor: isActive ? 'var(--color-secondary)' : 'var(--bg-card)',
-                color: isActive ? '#ffffff' : 'var(--text-main)',
-                boxShadow: isActive ? '0 4px 10px var(--color-secondary-glow)' : 'var(--shadow-sm)',
-                textAlign: 'center',
-                transition: 'var(--transition-normal)'
-              }}
-            >
-              {m.name.substring(0, 3)}
-            </button>
-          );
-        })}
+        {yearsList.map((year, yIdx) => (
+          <div key={year} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+            {/* Year Label Tag */}
+            <div style={{
+              fontFamily: 'var(--font-heading)',
+              fontWeight: '800',
+              fontSize: '0.88rem',
+              letterSpacing: '0.5px',
+              padding: '8px 12px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-app)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-main)',
+              boxShadow: 'var(--shadow-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              userSelect: 'none'
+            }}>
+              📅 {year}
+            </div>
+            
+            {/* Month Buttons for this Year */}
+            {monthsBase.map(m => {
+              const timelineKey = `${m.key}-${year}`;
+              const isActive = timelineKey === selectedTimelineKey;
+              return (
+                <button
+                  key={timelineKey}
+                  onClick={() => setSelectedTimelineKey(timelineKey)}
+                  className={`month-pill-btn ${isActive ? 'active' : ''}`}
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    fontWeight: '700',
+                    fontSize: '0.84rem',
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    backgroundColor: isActive ? 'var(--color-secondary)' : 'var(--bg-card)',
+                    color: isActive ? '#ffffff' : 'var(--text-main)',
+                    boxShadow: isActive ? '0 4px 10px var(--color-secondary-glow)' : 'var(--shadow-sm)',
+                    textAlign: 'center',
+                    transition: 'var(--transition-normal)',
+                    flex: '0 0 auto',
+                    minWidth: '56px'
+                  }}
+                >
+                  {m.key}
+                </button>
+              );
+            })}
+
+            {/* Separator between years */}
+            {yIdx < yearsList.length - 1 && (
+              <div style={{
+                width: '1px',
+                height: '24px',
+                backgroundColor: 'var(--border-color)',
+                margin: '0 12px',
+                flexShrink: 0
+              }} />
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Active Rent Increase Banners */}
@@ -286,10 +401,17 @@ export default function RentLedger({
             <TrendingUp size={24} style={{ color: 'var(--color-primary)', marginTop: '2px', flexShrink: 0 }} />
             <div>
               <div style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--text-main)' }}>
-                📈 Rent Increase Active this Month ({selectedMonthName})
+                📈 Rent Increase Active this Month ({displayActiveMonthName})
               </div>
               <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                An automatic <strong>{raise.percent}%</strong> raise is now active for <strong>{raise.tenantName}</strong> at <strong>{raise.propertyName}</strong>.
+                An automatic <strong>{raise.percent}%</strong> raise is now active for <strong style={{
+                  color: 'var(--color-secondary)',
+                  backgroundColor: 'var(--color-secondary-light)',
+                  padding: '2px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid rgba(204, 90, 55, 0.15)',
+                  fontWeight: '800'
+                }}>{raise.tenantName}</strong> at <strong>{raise.propertyName}</strong>.
                 <br />
                 Effective date: {raise.effectiveDate}.
               </div>
@@ -344,7 +466,7 @@ export default function RentLedger({
       ) : (
         <div className="item-card" style={{ borderTop: '4px solid var(--color-primary)', padding: '24px', position: 'relative' }}>
           <div className="card-folder-tab tab-ledger" style={{ top: '-24px', left: '-1px', height: '24px', fontSize: '0.7rem' }}>
-            🗓️ {selectedMonthName} 2026 Sheet
+            🗓️ {displayActiveMonthName} Sheet
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -366,9 +488,11 @@ export default function RentLedger({
               <tbody>
                 {tenants.map(tenant => {
                   const tenantPayments = ledger[tenant.id] || {};
-                  const isAvailable = isMonthAvailable(tenant.moveInDate, selectedMonthKey);
-                  const payData = tenantPayments[selectedMonthKey];
-                  const computedRent = getRentForMonth(tenant, selectedMonthKey);
+                  const isAvailable = isMonthAvailable(tenant.moveInDate, selectedTimelineKey);
+                  
+                  const [mKey, yStr] = selectedTimelineKey.split('-');
+                  const payData = getPaymentData(tenantPayments, mKey, parseInt(yStr, 10));
+                  const computedRent = getRentForMonth(tenant, selectedTimelineKey);
 
                   let statusText = 'Unmarked';
                   let amountStr = '—';
@@ -451,7 +575,7 @@ export default function RentLedger({
                           {isAvailable && (statusText === 'PendingDue' || statusText === 'Pending Due' || statusText === 'Unmarked' || statusText === 'Unpaid') && (
                             <button 
                               className="btn btn-primary" 
-                              onClick={() => handleMarkPaid(tenant, selectedMonthKey)}
+                              onClick={() => handleMarkPaid(tenant, selectedTimelineKey)}
                               style={{ padding: '4px 12px', fontSize: '0.78rem', minHeight: '26px', backgroundColor: 'var(--color-primary)' }}
                               title="Mark Paid"
                             >
@@ -462,7 +586,7 @@ export default function RentLedger({
                           {isAvailable && (statusText === 'Paid' || statusText === 'Partial') && (
                             <button 
                               className="btn btn-secondary" 
-                              onClick={() => handleMarkUnpaid(tenant, selectedMonthKey)}
+                              onClick={() => handleMarkUnpaid(tenant, selectedTimelineKey)}
                               style={{ padding: '4px 12px', fontSize: '0.78rem', minHeight: '26px', border: '1px solid var(--color-danger)', color: 'var(--color-danger)' }}
                               title="Mark Unpaid / Reset"
                             >
@@ -470,21 +594,25 @@ export default function RentLedger({
                             </button>
                           )}
 
+                          {/* primary payment editor modal trigger */}
                           {isAvailable && (
                             <button 
-                              onClick={() => handleOpenSquareEditor(tenant, selectedMonthKey)}
+                              onClick={() => handleOpenSquareEditor(tenant, selectedTimelineKey)}
                               className="icon-action-btn"
                               style={{
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
                                 color: 'var(--text-muted)',
-                                padding: '4px',
-                                display: 'inline-flex'
+                                padding: '6px',
+                                display: 'inline-flex',
+                                borderRadius: 'var(--radius-sm)',
+                                border: '1px solid var(--border-color)',
+                                backgroundColor: 'var(--bg-card)'
                               }}
-                              title="Open Custom Payment Editor"
+                              title="Edit Details & Rent Due"
                             >
-                              <Edit3 size={16} />
+                              <Edit3 size={15} />
                             </button>
                           )}
 
@@ -505,7 +633,7 @@ export default function RentLedger({
           <div className="modal-content" style={{ maxWidth: '420px' }}>
             <div className="modal-header">
               <h3 className="modal-title">
-                💰 Log Payment: {activeSquare.monthName}
+                💰 Log Payment & Rent Due
               </h3>
               <button 
                 onClick={() => setActiveSquare(null)} 
@@ -517,10 +645,24 @@ export default function RentLedger({
 
             <div style={{ marginBottom: '16px', fontSize: '0.9rem', backgroundColor: 'var(--bg-app)', padding: '10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
               <div>👤 <strong>Tenant Name:</strong> {activeSquare.tenantName}</div>
-              <div>💵 <strong>Rent Due:</strong> ₹{activeSquare.monthlyRent}</div>
+              <div>🗓️ <strong>Month:</strong> {activeSquare.monthName}</div>
             </div>
 
             <form onSubmit={handleSavePaymentDetails}>
+              {/* Editable Rent Due inside primary payment modal */}
+              <div className="form-group">
+                <label className="form-label">Rent Due for this Month (₹)</label>
+                <input 
+                  type="number" 
+                  className="form-input" 
+                  value={customRentDue}
+                  onChange={(e) => setCustomRentDue(e.target.value)}
+                  placeholder="e.g. 8000"
+                  min="0"
+                  required
+                />
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Payment Status</label>
                 <select 
@@ -529,7 +671,7 @@ export default function RentLedger({
                   onChange={(e) => {
                     setPaymentStatus(e.target.value);
                     if (e.target.value === 'Paid') {
-                      setPaidAmt(activeSquare.monthlyRent.toString());
+                      setPaidAmt(customRentDue);
                       setRemainingAmt('');
                     } else if (e.target.value === 'Unpaid' || e.target.value === 'Unmarked') {
                       setPaidAmt('');
@@ -555,7 +697,7 @@ export default function RentLedger({
                       onChange={(e) => {
                         setPaidAmt(e.target.value);
                         if (paymentStatus === 'Partial' && e.target.value) {
-                          const diff = activeSquare.monthlyRent - Number(e.target.value);
+                          const diff = (Number(customRentDue) || activeSquare.monthlyRent) - Number(e.target.value);
                           setRemainingAmt(diff > 0 ? diff.toString() : '0');
                         }
                       }}
