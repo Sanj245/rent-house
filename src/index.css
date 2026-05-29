@@ -250,7 +250,7 @@ p {
     background-color: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
-    padding: 14px 24px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 24px 14px 24px;
     position: sticky;
     top: 0;
     z-index: 100;
@@ -271,7 +271,7 @@ p {
     background-color: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--border-color);
-    padding: 8px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)) 8px;
     display: grid !important;
     grid-template-columns: repeat(5, 1fr);
     gap: 4px;
@@ -301,7 +301,7 @@ p {
 
   /* Main content shifts spacing on mobile to clear bottom nav */
   .main-content {
-    padding: 24px 16px 80px 16px;
+    padding: 24px 16px calc(80px + env(safe-area-inset-bottom, 0px)) 16px;
   }
 }
 
