@@ -1,62 +1,108 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, DollarSign, Settings, Download, Bell, Info, AlertTriangle, CheckCircle, X } from 'lucide-react';
-import Dashboard from './components/Dashboard';
+import { Home, Users, DollarSign, Settings, Download, Bell, Info, AlertTriangle, CheckCircle, X, History } from 'lucide-react';
+
 import PropertyManager from './components/PropertyManager';
 import TenantManager from './components/TenantManager';
 import RentLedger from './components/RentLedger';
+import TenancyHistory from './components/TenancyHistory';
+import MobileApp from './components/mobile/MobileApp';
+import './mobile.css';
+
+import { getValue, setValue } from './db';
 
 export default function App() {
-  // Initial state is an empty slate (ready for user data entry)
-  const [properties, setProperties] = useState(() => {
-    const saved = localStorage.getItem('rentease_properties');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [loading, setLoading] = useState(true);
+  const [properties, setProperties] = useState([]);
+  const [pastTenants, setPastTenants] = useState([]);
+  const [tenants, setTenants] = useState([]);
+  const [ledger, setLedger] = useState({});
 
-  const [tenants, setTenants] = useState(() => {
-    const saved = localStorage.getItem('rentease_tenants');
-    const initialTenants = saved ? JSON.parse(saved) : [];
-    
+  // 11-Month raise engine helper
+  const checkTenantsRaise = (initialTenants) => {
     const todayStr = new Date().toISOString().split('T')[0];
     let updated = false;
     
     const checkedTenants = initialTenants.map(t => {
-      if (t.scheduledRaiseEffectiveDate && todayStr >= t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
-        const raiseAmt = Math.round((Number(t.rent) * Number(t.scheduledRaisePercent)) / 100);
-        const newRent = Number(t.rent) + raiseAmt;
-        const history = t.rentHistory || [{ date: t.moveInDate, amount: t.rent, reason: 'Starting Rent' }];
-        
-        updated = true;
-        return {
-          ...t,
-          rent: newRent,
-          raiseApplied: true,
-          rentHistory: [
-            ...history,
-            { 
-              date: t.scheduledRaiseEffectiveDate, 
-              amount: newRent, 
-              reason: `Automatic ${t.scheduledRaisePercent}% Raise Applied` 
-            }
-          ]
-        };
-      }
-      return t;
-    });
-    
-    if (updated) {
-      localStorage.setItem('rentease_tenants', JSON.stringify(checkedTenants));
-      return checkedTenants;
-    }
-    return initialTenants;
-  });
+      let temp = { ...t };
+      let changed = false;
 
-  const [ledger, setLedger] = useState(() => {
-    const saved = localStorage.getItem('rentease_ledger');
-    return saved ? JSON.parse(saved) : {};
-  });
+      // Rent raise
+      if (temp.scheduledRaiseEffectiveDate && todayStr >= temp.scheduledRaiseEffectiveDate && !temp.raiseApplied) {
+        const raiseAmt = Math.round((Number(temp.rent) * Number(temp.scheduledRaisePercent)) / 100);
+        const newRent = Number(temp.rent) + raiseAmt;
+        const history = temp.rentHistory || [{ date: temp.moveInDate, amount: temp.rent, reason: 'Starting Rent' }];
+        
+        temp.rent = newRent;
+        temp.raiseApplied = true;
+        temp.rentHistory = [
+          ...history,
+          { 
+            date: temp.scheduledRaiseEffectiveDate, 
+            amount: newRent, 
+            reason: `Automatic ${temp.scheduledRaisePercent}% Raise Applied` 
+          }
+        ];
+        changed = true;
+      }
+
+      if (changed) {
+        updated = true;
+      }
+      return temp;
+    });
+
+    if (updated) {
+      setValue('rentease_tenants', checkedTenants);
+    }
+    return checkedTenants;
+  };
+
+  // Hydrate states from IndexedDB / localStorage on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        let props = await getValue('rentease_properties', null);
+        let tnts = await getValue('rentease_tenants', null);
+        let ledg = await getValue('rentease_ledger', null);
+        let past = await getValue('rentease_past_tenants', null);
+
+        // Fallback / migration from localStorage
+        if (props === null) {
+          const saved = localStorage.getItem('rentease_properties');
+          props = saved ? JSON.parse(saved) : [];
+          if (props.length > 0) await setValue('rentease_properties', props);
+        }
+        if (tnts === null) {
+          const saved = localStorage.getItem('rentease_tenants');
+          tnts = saved ? JSON.parse(saved) : [];
+          if (tnts.length > 0) await setValue('rentease_tenants', tnts);
+        }
+        if (ledg === null) {
+          const saved = localStorage.getItem('rentease_ledger');
+          ledg = saved ? JSON.parse(saved) : {};
+          if (Object.keys(ledg).length > 0) await setValue('rentease_ledger', ledg);
+        }
+        if (past === null) {
+          const saved = localStorage.getItem('rentease_past_tenants');
+          past = saved ? JSON.parse(saved) : [];
+          if (past.length > 0) await setValue('rentease_past_tenants', past);
+        }
+
+        if (props) setProperties(props);
+        if (tnts) setTenants(checkTenantsRaise(tnts));
+        if (ledg) setLedger(ledg);
+        if (past) setPastTenants(past);
+      } catch (err) {
+        console.error("Error loading data from IndexedDB:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
   // Navigation State
-  const [currentTab, setCurrentTab] = useState('dashboard');
+  const [currentTab, setCurrentTab] = useState('ledger');
   const [showNotifications, setShowNotifications] = useState(false);
 
   // Dynamic notifications list
@@ -65,7 +111,7 @@ export default function App() {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
 
-    // 1. Rent raises (upcoming & recent)
+    // Rent raises only
     tenants.forEach(t => {
       // Upcoming
       if (t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
@@ -161,18 +207,30 @@ export default function App() {
 
   const notifications = getNotifications();
 
-  // Sync to localStorage
+  // Sync to IndexedDB
   useEffect(() => {
-    localStorage.setItem('rentease_properties', JSON.stringify(properties));
-  }, [properties]);
+    if (!loading) {
+      setValue('rentease_properties', properties);
+    }
+  }, [properties, loading]);
 
   useEffect(() => {
-    localStorage.setItem('rentease_tenants', JSON.stringify(tenants));
-  }, [tenants]);
+    if (!loading) {
+      setValue('rentease_tenants', tenants);
+    }
+  }, [tenants, loading]);
 
   useEffect(() => {
-    localStorage.setItem('rentease_ledger', JSON.stringify(ledger));
-  }, [ledger]);
+    if (!loading) {
+      setValue('rentease_ledger', ledger);
+    }
+  }, [ledger, loading]);
+
+  useEffect(() => {
+    if (!loading) {
+      setValue('rentease_past_tenants', pastTenants);
+    }
+  }, [pastTenants, loading]);
 
   // Operations
   const addProperty = (newProp) => {
@@ -213,11 +271,12 @@ export default function App() {
           { 
             date: processedTenant.scheduledRaiseEffectiveDate, 
             amount: newRent, 
-            reason: `Automatic ${processedTenant.scheduledRaisePercent}% Raise Applied` 
+            reason: `Automatic ${processedTenant.scheduledRaisePercent}% Rent Raise Applied` 
           }
         ]
       };
     }
+
 
     setTenants(prev => [...prev, processedTenant]);
     setProperties(prev => prev.map(p => p.id === newTenant.propertyId ? { ...p, status: 'Occupied' } : p));
@@ -225,6 +284,40 @@ export default function App() {
   };
 
   const removeTenant = (tenantId, propertyId) => {
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (tenant) {
+      const tenantPayments = ledger[tenantId] || {};
+      let totalRentCollected = 0;
+      Object.values(tenantPayments).forEach(pay => {
+        if (pay) {
+          if (typeof pay === 'string' && pay === 'Paid') {
+            totalRentCollected += Number(tenant.rent);
+          } else if (typeof pay === 'object') {
+            if (pay.status === 'Paid') {
+              totalRentCollected += Number(pay.paid || pay.rentDue || tenant.rent);
+            } else if (pay.status === 'Partial') {
+              totalRentCollected += Number(pay.paid || 0);
+            }
+          }
+        }
+      });
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const pastRecord = {
+        id: `${tenant.id}-past-${Date.now()}`,
+        name: tenant.name,
+        phone: tenant.phone,
+        propertyId: tenant.propertyId,
+        propertyName: properties.find(p => p.id === tenant.propertyId)?.name || 'Unknown',
+        moveInDate: tenant.moveInDate,
+        moveOutDate: todayStr,
+        totalRentCollected: totalRentCollected,
+        securityDeposit: tenant.securityDeposit,
+        rent: tenant.rent
+      };
+      setPastTenants(prev => [...prev, pastRecord]);
+    }
+
     setTenants(prev => prev.filter(t => t.id !== tenantId));
     setProperties(prev => prev.map(p => p.id === propertyId ? { ...p, status: 'Vacant' } : p));
     setLedger(prev => {
@@ -306,13 +399,81 @@ export default function App() {
     linkElement.click();
   };
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        width: '100vw',
+        background: 'radial-gradient(circle at top right, #3d6a54, #1a2c22, #0d1510)',
+        color: '#ffffff',
+        fontFamily: 'Outfit, sans-serif'
+      }}>
+        <div className="loader-spinner" style={{
+          width: '50px',
+          height: '50px',
+          borderRadius: '50%',
+          border: '3px solid rgba(255, 255, 255, 0.1)',
+          borderTopColor: '#d4a373',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '16px'
+        }} />
+        <h3 style={{ fontWeight: '500', fontSize: '1.2rem', letterSpacing: '0.5px' }}>RentEase Dossiers</h3>
+        <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginTop: '4px' }}>Loading secure local storage...</p>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <MobileApp 
+        properties={properties}
+        setProperties={setProperties}
+        tenants={tenants}
+        setTenants={setTenants}
+        ledger={ledger}
+        setLedger={setLedger}
+        pastTenants={pastTenants}
+        setPastTenants={setPastTenants}
+        notifications={notifications}
+        addProperty={addProperty}
+        editProperty={editProperty}
+        deleteProperty={deleteProperty}
+        addTenant={addTenant}
+        removeTenant={removeTenant}
+        scheduleRentRaise={scheduleRentRaise}
+        updatePaymentStatus={updatePaymentStatus}
+        updateTenantNotes={updateTenantNotes}
+        handleExportData={handleExportData}
+      />
+    );
+  }
+
   return (
     <div id="app-root" className="app-layout">
       {/* DESKTOP SIDEBAR NAVIGATION */}
       <aside className="sidebar">
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <a href="#" className="app-logo" onClick={() => setCurrentTab('dashboard')}>
+            <a href="#" className="app-logo" onClick={() => setCurrentTab('ledger')}>
               🏠 Rent<span className="app-logo-span">Ease</span>
             </a>
             <button 
@@ -349,12 +510,7 @@ export default function App() {
           </div>
           
           <nav className="nav-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '32px' }}>
-            <button 
-              className={`nav-link ${currentTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('dashboard')}
-            >
-              📊 Dashboard
-            </button>
+
             <button 
               className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`}
               onClick={() => setCurrentTab('properties')}
@@ -372,6 +528,12 @@ export default function App() {
               onClick={() => setCurrentTab('ledger')}
             >
               📅 Rents
+            </button>
+            <button 
+              className={`nav-link ${currentTab === 'history' ? 'active' : ''}`}
+              onClick={() => setCurrentTab('history')}
+            >
+              📖 History Logs
             </button>
             <button 
               className={`nav-link ${currentTab === 'settings' ? 'active' : ''}`}
@@ -392,7 +554,7 @@ export default function App() {
       {/* MOBILE TOP HEADER BAR (Only visible on mobile viewport) */}
       <header className="main-header">
         <div className="header-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-          <a href="#" className="app-logo" onClick={() => setCurrentTab('dashboard')}>
+          <a href="#" className="app-logo" onClick={() => setCurrentTab('ledger')}>
             🏠 Rent<span className="app-logo-span">Ease</span>
           </a>
           <button 
@@ -429,13 +591,7 @@ export default function App() {
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       <div className="nav-container nav-mobile-bar" style={{ display: 'none' }}>
-        <button 
-          className={`nav-link ${currentTab === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('dashboard')}
-        >
-          <Home size={20} />
-          Dashboard
-        </button>
+
         <button 
           className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`}
           onClick={() => setCurrentTab('properties')}
@@ -458,6 +614,13 @@ export default function App() {
           Rents
         </button>
         <button 
+          className={`nav-link ${currentTab === 'history' ? 'active' : ''}`}
+          onClick={() => setCurrentTab('history')}
+        >
+          <History size={20} />
+          Logs
+        </button>
+        <button 
           className={`nav-link ${currentTab === 'settings' ? 'active' : ''}`}
           onClick={() => setCurrentTab('settings')}
         >
@@ -470,14 +633,7 @@ export default function App() {
       <div className="main-content">
         <main className="app-container" style={{ maxWidth: '100%', padding: 0 }}>
           
-          {currentTab === 'dashboard' && (
-            <Dashboard 
-              properties={properties}
-              tenants={tenants}
-              ledger={ledger}
-              setCurrentTab={setCurrentTab}
-            />
-          )}
+
 
           {currentTab === 'properties' && (
             <PropertyManager 
@@ -509,10 +665,19 @@ export default function App() {
             />
           )}
 
+          {currentTab === 'history' && (
+            <TenancyHistory 
+              properties={properties}
+              tenants={tenants}
+              pastTenants={pastTenants}
+              ledger={ledger}
+            />
+          )}
+
           {currentTab === 'settings' && (
             <div className="settings-box">
               <h2 style={{ fontSize: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
-                ⚙️ Dashboard Settings & Data Backups
+                ⚙️ Settings & Data Backups
               </h2>
 
               <div className="settings-group" style={{ borderBottom: 'none', paddingBottom: 0 }}>

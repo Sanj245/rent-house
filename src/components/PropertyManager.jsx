@@ -63,8 +63,8 @@ export default function PropertyManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 1024 * 1024) {
-      alert('⚠️ Image size too large:\n\nTo preserve local storage space, please upload appliance images smaller than 1.0 MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      alert('⚠️ Image size too large:\n\nTo preserve local storage space, please upload appliance images smaller than 15.0 MB.');
       e.target.value = null; // Clear input
       return;
     }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Users, Plus, Phone, Calendar, FileText, Upload, Edit3, X, ArrowUpRight } from 'lucide-react';
+import { Users, Plus, Phone, Calendar, FileText, Upload, Edit3, X, ArrowUpRight, CreditCard, Shield, Image as ImageIcon } from 'lucide-react';
+import PdfInlinePreview from './PdfInlinePreview';
 
 export default function TenantManager({ 
   tenants, 
@@ -20,19 +21,25 @@ export default function TenantManager({
   const [propertyId, setPropertyId] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [emergencyContact, setEmergencyContact] = useState('');
+  const [altPhone, setAltPhone] = useState('');
   const [securityDeposit, setSecurityDeposit] = useState('');
   const [rent, setRent] = useState('');
   const [moveInDate, setMoveInDate] = useState('');
+  const [description, setDescription] = useState('');
   const [agreementFile, setAgreementFile] = useState(null);
+  const [aadharFile, setAadharFile] = useState(null);
+  const [photo, setPhoto] = useState(null);
+
+  // Image/PDF Document Preview Lightbox State
+  const [previewFile, setPreviewFile] = useState(null);
 
   // Scheduled Raise Form States
   const [scheduledRaisePercent, setScheduledRaisePercent] = useState('10');
   const [scheduledRaiseEffectiveDate, setScheduledRaiseEffectiveDate] = useState('');
 
-  // Get vacant properties
-  const vacantProperties = properties.filter(p => p.status === 'Vacant');
+
+  // Get vacant properties dynamically using active tenants check
+  const vacantProperties = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
 
   const handleOpenAdd = () => {
     if (vacantProperties.length === 0) {
@@ -42,22 +49,25 @@ export default function TenantManager({
     setPropertyId(vacantProperties[0].id);
     setName('');
     setPhone('');
-    setEmail('');
-    setEmergencyContact('');
+    setAltPhone('');
     setSecurityDeposit('10000');
     setRent('8000');
+    setDescription('');
     setAgreementFile(null);
+    setAadharFile(null);
+    setPhoto(null);
     setScheduledRaisePercent('10');
+
     
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     setMoveInDate(todayStr);
 
-    // Default raise effective date to exactly 1 year from today
-    const oneYearLater = new Date();
-    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-    const oneYearLaterStr = oneYearLater.toISOString().split('T')[0];
-    setScheduledRaiseEffectiveDate(oneYearLaterStr);
+    // Default raise effective date to exactly 11 months from today
+    const elevenMonthsLater = new Date();
+    elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
+    const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
+    setScheduledRaiseEffectiveDate(elevenMonthsLaterStr);
 
     setIsModalOpen(true);
   };
@@ -66,11 +76,11 @@ export default function TenantManager({
     setSelectedTenant(tenant);
     setNewRaisePercent('10');
     
-    // Default reschedule raise effective date to 1 year from now
-    const oneYearLater = new Date();
-    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-    const oneYearLaterStr = oneYearLater.toISOString().split('T')[0];
-    setEffectiveDate(oneYearLaterStr);
+    // Default reschedule raise effective date to 11 months from now
+    const elevenMonthsLater = new Date();
+    elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
+    const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
+    setEffectiveDate(elevenMonthsLaterStr);
     
     setIsRentModalOpen(true);
   };
@@ -79,8 +89,8 @@ export default function TenantManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 1.5 * 1024 * 1024) {
-      alert('⚠️ Document file size is too large:\n\nTo preserve local storage space, please upload signed agreements smaller than 1.5 Megabytes. For larger documents, we will record the file name, but recommend keeping the PDF on your computer!');
+    if (file.size > 15.0 * 1024 * 1024) {
+      alert('⚠️ Document file size is too large:\n\nTo preserve local storage space, please upload signed agreements smaller than 15.0 Megabytes. For larger documents, we will record the file name, but recommend keeping the PDF on your computer!');
       setAgreementFile({
         name: file.name,
         size: file.size,
@@ -102,6 +112,58 @@ export default function TenantManager({
     };
   };
 
+  const handleAadharFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 15.0 * 1024 * 1024) {
+      alert('⚠️ Aadhar file size is too large:\n\nTo preserve local storage space, please upload documents smaller than 15.0 Megabytes. For larger files, we will save the file name, but recommend reducing the size for complete local backup.');
+      setAadharFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        data: '' 
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      setAadharFile({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        data: reader.result 
+      });
+    };
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 15.0 * 1024 * 1024) {
+      alert('⚠️ Photo file size is too large:\n\nTo preserve local storage space, please upload photos smaller than 15.0 Megabytes.');
+      return;
+    }
+
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      setPhoto(reader.result);
+    };
+  };
+
+  const calculateRentRaiseDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    date.setMonth(date.getMonth() + 11);
+    return date.toISOString().split('T')[0];
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim() || !phone.trim() || !rent || !securityDeposit) {
@@ -113,14 +175,16 @@ export default function TenantManager({
       propertyId,
       name: name.trim(),
       phone: phone.trim(),
-      email: email.trim() || 'No Email',
-      emergencyContact: emergencyContact.trim() || 'None',
+      altPhone: altPhone.trim() || 'None',
+      description: description.trim() || '',
       securityDeposit: Number(securityDeposit),
       rent: Number(rent),
       moveInDate,
       agreementFile,
+      aadharFile,
+      photo,
       scheduledRaisePercent: Number(scheduledRaisePercent),
-      scheduledRaiseEffectiveDate,
+      scheduledRaiseEffectiveDate: calculateRentRaiseDate(moveInDate),
       raiseApplied: false,
       rentHistory: [
         { date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }
@@ -130,6 +194,7 @@ export default function TenantManager({
     addTenant(tenantData);
     setIsModalOpen(false);
   };
+
 
   const handleRentUpdateSubmit = (e) => {
     e.preventDefault();
@@ -208,11 +273,48 @@ export default function TenantManager({
                 </div>
 
                 <div>
-                  <div className="item-card-header" style={{ marginTop: '4px' }}>
-                    <div className="item-card-title">{tenant.name}</div>
-                    <span className="status-badge occupied">
-                      Active
-                    </span>
+                  <div className="item-card-header" style={{ marginTop: '4px', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {tenant.photo ? (
+                        <img 
+                          src={tenant.photo} 
+                          alt={tenant.name} 
+                          onClick={() => setPreviewImage(tenant.photo)}
+                          style={{ 
+                            width: '46px', 
+                            height: '46px', 
+                            borderRadius: '50%', 
+                            objectFit: 'cover', 
+                            border: '2px solid var(--border-color)',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s',
+                            boxShadow: 'var(--shadow-sm)'
+                          }}
+                          className="tenant-avatar-hover"
+                          title="Click to view full photo"
+                        />
+                      ) : (
+                        <div style={{ 
+                          width: '46px', 
+                          height: '46px', 
+                          borderRadius: '50%', 
+                          backgroundColor: 'var(--color-secondary-light)', 
+                          color: 'var(--color-secondary)',
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          fontWeight: '800',
+                          fontSize: '1rem',
+                          border: '2px solid var(--border-color)'
+                        }}>
+                          {tenant.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <div className="item-card-title" style={{ fontSize: '1.25rem' }}>{tenant.name}</div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Registered Tenant</div>
+                      </div>
+                    </div>
                   </div>
                   
                   <div style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--color-secondary)', marginTop: '2px', marginBottom: '14px' }}>
@@ -221,72 +323,172 @@ export default function TenantManager({
 
                   <div className="item-details-list">
                     <div className="detail-row">
-                      <span className="label">Phone</span>
-                      <span className="value">{tenant.phone}</span>
+                      <span className="label">📞 Phone Number</span>
+                      <span className="value" style={{ fontWeight: '700' }}>{tenant.phone}</span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Email</span>
-                      <span className="value" style={{ fontSize: '0.85rem' }}>{tenant.email}</span>
+                      <span className="label">📱 Alt Phone No.</span>
+                      <span className="value">{tenant.altPhone || tenant.emergencyContact || 'None'}</span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Emergency Contact</span>
-                      <span className="value" style={{ fontSize: '0.85rem' }}>{tenant.emergencyContact}</span>
-                    </div>
-                    <div className="detail-row">
-                      <span className="label">Current Rent</span>
-                      <span className="value" style={{ color: 'var(--color-primary)', fontSize: '1.1rem', fontWeight: '700' }}>
+                      <span className="label">💰 Monthly Rent</span>
+                      <span className="value" style={{ color: 'var(--color-primary)', fontSize: '1.15rem', fontWeight: '800' }}>
                         ₹{tenant.rent}/mo
                       </span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Security Deposit</span>
-                      <span className="value" style={{ color: 'var(--color-purple)' }}>
+                      <span className="label">🔐 Security Deposit</span>
+                      <span className="value" style={{ color: 'var(--color-purple)', fontWeight: '700' }}>
                         ₹{tenant.securityDeposit}
                       </span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Move-in Date</span>
-                      <span className="value">{tenant.moveInDate}</span>
-                    </div>
-
-                    {/* Signed Agreement Document display */}
-                    {tenant.agreementFile && (
-                      <div className="detail-row" style={{ borderBottom: 'none', marginTop: '6px', alignItems: 'center' }}>
-                        <span className="label">📄 Agreement File</span>
-                        <span className="value">
-                          {tenant.agreementFile.data ? (
-                            <a 
-                              href={tenant.agreementFile.data} 
-                              download={tenant.agreementFile.name}
-                              style={{ 
-                                display: 'inline-flex', 
-                                alignItems: 'center', 
-                                gap: '4px',
-                                color: 'var(--color-secondary)', 
-                                fontWeight: '700', 
-                                textDecoration: 'underline' 
-                              }}
-                            >
-                              <FileText size={14} /> Download File
-                            </a>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                              📁 {tenant.agreementFile.name} (Large)
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Active Official Wax Seal */}
-                    <div className="wax-seal-container" style={{ justifyContent: 'space-between', borderTop: '1px dashed var(--border-color)', paddingTop: '10px' }}>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        ✍️ Registry status:
-                        <div style={{ fontWeight: '700', color: 'var(--color-primary)' }}>Verified Offline</div>
-                      </div>
-                      <div className="wax-seal-badge" title="Verified Agreement Seal" />
+                      <span className="label">📅 Move-in Date</span>
+                      <span className="value" style={{ fontWeight: '700' }}>{tenant.moveInDate}</span>
                     </div>
                   </div>
+
+                  {/* Documents Section */}
+                  <div style={{ 
+                    marginTop: '16px', 
+                    paddingTop: '14px', 
+                    borderTop: '1px dashed var(--border-color)' 
+                  }}>
+                    <div style={{ 
+                      fontSize: '0.8rem', 
+                      fontWeight: '800', 
+                      textTransform: 'uppercase', 
+                      color: 'var(--text-muted)', 
+                      marginBottom: '8px', 
+                      letterSpacing: '0.5px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      📁 Attached Documents
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* Aadhar Card Display */}
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-app)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <CreditCard size={16} style={{ color: 'var(--color-secondary)' }} />
+                          <div style={{ fontSize: '0.88rem', fontWeight: '600' }}>Landlord Aadhar</div>
+                        </div>
+                        <div>
+                          {tenant.aadharFile ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {tenant.aadharFile.data ? (
+                                <button 
+                                  onClick={() => setPreviewFile(tenant.aadharFile)}
+                                  className="btn btn-secondary"
+                                  style={{ 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.75rem', 
+                                    minHeight: '24px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <ImageIcon size={12} /> Preview
+                                </button>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Attached
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              Not Provided
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Signed Agreement Display */}
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        backgroundColor: 'var(--bg-app)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <FileText size={16} style={{ color: 'var(--color-primary)' }} />
+                          <div style={{ fontSize: '0.88rem', fontWeight: '600' }}>Signed Agreement</div>
+                        </div>
+                        <div>
+                          {tenant.agreementFile ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {tenant.agreementFile.data ? (
+                                <button 
+                                  onClick={() => setPreviewFile(tenant.agreementFile)}
+                                  className="btn btn-secondary"
+                                  style={{ 
+                                    padding: '4px 8px', 
+                                    fontSize: '0.75rem', 
+                                    minHeight: '24px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <FileText size={12} /> Preview
+                                </button>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                  Attached
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                              Not Provided
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Landlord Description Notes */}
+                  {tenant.description && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div style={{ 
+                        fontSize: '0.8rem', 
+                        fontWeight: '800', 
+                        textTransform: 'uppercase', 
+                        color: 'var(--text-muted)', 
+                        marginBottom: '6px', 
+                        letterSpacing: '0.5px' 
+                      }}>
+                        📝 Agreement Description
+                      </div>
+                      <div className="diary-ruled-sheet" style={{ 
+                        whiteSpace: 'pre-wrap', 
+                        minHeight: 'auto', 
+                        padding: '10px 14px',
+                        lineHeight: '1.6',
+                        fontSize: '0.88rem'
+                      }}>
+                        {tenant.description}
+                      </div>
+                    </div>
+                  )}
+
+
 
                   {/* AUTOMATIC SCHEDULED RENT INCREASE BOX */}
                   <div style={{ 
@@ -302,7 +504,7 @@ export default function TenantManager({
                       fontWeight: '700', 
                       marginBottom: '4px' 
                     }}>
-                      {tenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase:'}
+                      {tenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase (11 Months):'}
                     </h4>
                     
                     {tenant.raiseApplied ? (
@@ -311,9 +513,9 @@ export default function TenantManager({
                       </div>
                     ) : (
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '8px' }}>
-                        Automatic <strong>{tenant.scheduledRaisePercent}%</strong> increase set for <strong>{tenant.scheduledRaiseEffectiveDate}</strong>.
+                        Automatic <strong>{tenant.scheduledRaisePercent}%</strong> Rent Increase set for <strong>{tenant.scheduledRaiseEffectiveDate}</strong>.
                         <br />
-                        Rent will raise to <strong>₹{preview.newRent}</strong> (+₹{preview.raise}).
+                        Rent will raise to <strong>₹{getRaisePreview(tenant.rent, tenant.scheduledRaisePercent).newRent}</strong>.
                       </div>
                     )}
 
@@ -336,15 +538,25 @@ export default function TenantManager({
                       <ArrowUpRight size={14} /> {tenant.raiseApplied ? 'Schedule Next Increase' : 'Edit Scheduled Increase'}
                     </button>
                   </div>
+
+                  {/* AUTOMATIC SCHEDULED DEPOSIT INCREASE REMOVED */}
+
                 </div>
 
                 <div className="item-card-actions" style={{ marginTop: '14px' }}>
                   <button 
                     className="btn btn-danger" 
                     onClick={() => handleRemove(tenant)}
-                    style={{ width: '100%' }}
+                    style={{ 
+                      width: '100%',
+                      padding: '12px 20px',
+                      fontSize: '1rem',
+                      fontWeight: '800',
+                      letterSpacing: '0.2px',
+                      minHeight: '48px'
+                    }}
                   >
-                    Vacate Property (End Tenancy)
+                    🚪 Vacate Property (End Tenancy)
                   </button>
                 </div>
               </div>
@@ -358,7 +570,7 @@ export default function TenantManager({
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Register Tenant Details</h3>
+              <h3 className="modal-title">Register Tenant & Agreement</h3>
               <button 
                 onClick={() => setIsModalOpen(false)} 
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
@@ -368,8 +580,9 @@ export default function TenantManager({
             </div>
 
             <form onSubmit={handleSubmit}>
+              {/* 1. Property Name */}
               <div className="form-group">
-                <label className="form-label">Select Rental Property</label>
+                <label className="form-label">🏠 Select Rental Property</label>
                 <select 
                   className="form-input" 
                   value={propertyId} 
@@ -382,57 +595,123 @@ export default function TenantManager({
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Tenant Name</label>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)} 
-                  placeholder="Enter tenant name" 
-                  required
-                />
-              </div>
-
+              {/* 2. Tenant Name & Tenant Photo */}
               <div className="form-row-2">
                 <div className="form-group">
-                  <label className="form-label">Phone Number</label>
+                  <label className="form-label">👥 Tenant Name</label>
                   <input 
-                    type="tel" 
+                    type="text" 
                     className="form-input" 
-                    value={phone} 
-                    onChange={(e) => setPhone(e.target.value)} 
-                    placeholder="Enter phone number" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="Enter tenant full name" 
                     required
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Email</label>
+                  <label className="form-label">📸 Tenant Photo (Optional)</label>
                   <input 
-                    type="email" 
-                    className="form-input" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    placeholder="tenant@example.com"
+                    type="file" 
+                    accept="image/*" 
+                    className="form-input"
+                    onChange={handlePhotoChange}
+                    style={{ cursor: 'pointer', padding: '6px', fontSize: '0.85rem' }}
                   />
                 </div>
               </div>
 
+              {/* 3. Phone Number & Alt Phone No. */}
+              <div className="form-row-2">
+                <div className="form-group">
+                  <label className="form-label">📞 Phone Number</label>
+                  <input 
+                    type="tel" 
+                    className="form-input" 
+                    value={phone} 
+                    onChange={(e) => setPhone(e.target.value)} 
+                    placeholder="Enter active phone number" 
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">📱 Alt Phone No.</label>
+                  <input 
+                    type="tel" 
+                    className="form-input" 
+                    value={altPhone} 
+                    onChange={(e) => setAltPhone(e.target.value)} 
+                    placeholder="Enter alternative contact number" 
+                  />
+                </div>
+              </div>
+
+              {/* 4. Add Documents Section (Aadhar Card and Signed Agreement side-by-side) */}
+              <div style={{ 
+                border: '1px solid var(--border-color)', 
+                borderRadius: 'var(--radius-md)', 
+                padding: '14px', 
+                backgroundColor: 'rgba(29, 36, 43, 0.01)',
+                marginBottom: '16px',
+                marginTop: '8px'
+              }}>
+                <h4 style={{ fontSize: '0.92rem', color: 'var(--text-main)', fontWeight: '700', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  📁 Attach Verified Documents
+                </h4>
+                
+                <div className="form-row-2">
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.82rem' }}>🪪 Landlord Aadhar Card (Image or PDF)</label>
+                    <input 
+                      type="file" 
+                      accept="image/*,.pdf" 
+                      className="form-input"
+                      onChange={handleAadharFileChange}
+                      style={{ cursor: 'pointer', padding: '6px', fontSize: '0.85rem' }}
+                    />
+                    {aadharFile && (
+                      <div style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--color-secondary)', fontWeight: '600' }}>
+                        📎 Attached: {aadharFile.name}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.82rem' }}>📄 Signed Agreement File (PDF/Word)</label>
+                    <input 
+                      type="file" 
+                      accept=".pdf,.docx,.doc" 
+                      className="form-input"
+                      onChange={handleFileChange}
+                      style={{ cursor: 'pointer', padding: '6px', fontSize: '0.85rem' }}
+                    />
+                    {agreementFile && (
+                      <div style={{ marginTop: '6px', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: '600' }}>
+                        📎 Attached: {agreementFile.name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Custom Description Text Area */}
               <div className="form-group">
-                <label className="form-label">Emergency / Secondary Contact (e.g. Local Guardian)</label>
-                <input 
-                  type="text" 
+                <label className="form-label">📝 Agreement Description / Notes</label>
+                <textarea 
                   className="form-input" 
-                  value={emergencyContact} 
-                  onChange={(e) => setEmergencyContact(e.target.value)} 
-                  placeholder="Name, Relationship & Phone number"
+                  value={description} 
+                  onChange={(e) => setDescription(e.target.value)} 
+                  placeholder="Enter a description, special terms, or any notes you want to save for this agreement..."
+                  rows={3}
+                  style={{ resize: 'vertical' }}
                 />
               </div>
 
+              {/* 6. Rent Amount & Security Deposit */}
               <div className="form-row-2">
                 <div className="form-group">
-                  <label className="form-label">Monthly Rent Amount (₹)</label>
+                  <label className="form-label">💰 Monthly Rent Amount (₹)</label>
                   <input 
                     type="number" 
                     className="form-input" 
@@ -444,7 +723,7 @@ export default function TenantManager({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Security Deposit Paid (₹)</label>
+                  <label className="form-label">🔐 Security Deposit Amount (₹)</label>
                   <input 
                     type="number" 
                     className="form-input" 
@@ -456,8 +735,9 @@ export default function TenantManager({
                 </div>
               </div>
 
+              {/* 7. Move-in Date */}
               <div className="form-group">
-                <label className="form-label">Move-in Date</label>
+                <label className="form-label">📅 Move-in Date</label>
                 <input 
                   type="date" 
                   className="form-input" 
@@ -467,23 +747,7 @@ export default function TenantManager({
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">📂 Upload Signed Agreement (PDF or Word DOCX)</label>
-                <input 
-                  type="file" 
-                  accept=".pdf,.docx,.doc" 
-                  className="form-input"
-                  onChange={handleFileChange}
-                  style={{ cursor: 'pointer', padding: '8px' }}
-                />
-                {agreementFile && (
-                  <div style={{ marginTop: '6px', fontSize: '0.85rem', color: 'var(--color-primary)', fontWeight: '600' }}>
-                    📎 Ready to attach: {agreementFile.name} ({(agreementFile.size / 1024).toFixed(1)} KB)
-                  </div>
-                )}
-              </div>
-
-              {/* AUTOMATIC SCHEDULED RENT INCREASE IN REGISTRATION */}
+              {/* 8. Rent Increase Scheduled Info */}
               <div style={{ 
                 backgroundColor: 'var(--color-secondary-light)', 
                 borderRadius: 'var(--radius-md)',
@@ -492,36 +756,23 @@ export default function TenantManager({
                 marginBottom: '16px' 
               }}>
                 <h4 style={{ fontSize: '0.95rem', color: 'var(--color-secondary)', fontWeight: '700', marginBottom: '6px' }}>
-                  📈 Schedule Automatic Rent Increase
+                  📈 Schedule Automatic Rent Increase (11 Months)
                 </h4>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                  Set a percentage raise that will automatically apply to the ledger on its effective date:
+                  The monthly rent will automatically increase by the following percentage exactly **11 months** from move-in:
                 </p>
 
-                <div className="form-row-2">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Raise Percentage (%)</label>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      value={scheduledRaisePercent} 
-                      onChange={(e) => setScheduledRaisePercent(e.target.value)} 
-                      min="0"
-                      max="100"
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>Effective Date</label>
-                    <input 
-                      type="date" 
-                      className="form-input" 
-                      value={scheduledRaiseEffectiveDate} 
-                      onChange={(e) => setScheduledRaiseEffectiveDate(e.target.value)} 
-                      required
-                    />
-                  </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ fontSize: '0.8rem' }}>Rent Raise Percentage (%)</label>
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    value={scheduledRaisePercent} 
+                    onChange={(e) => setScheduledRaisePercent(e.target.value)} 
+                    min="0"
+                    max="100"
+                    required
+                  />
                 </div>
 
                 {rent && scheduledRaisePercent && (
@@ -536,10 +787,11 @@ export default function TenantManager({
                     <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>
                       ₹{getRaisePreview(rent, scheduledRaisePercent).newRent}
                     </span>{' '}
-                    (Increase of +₹{getRaisePreview(rent, scheduledRaisePercent).raise})
+                    (Increase of +₹{getRaisePreview(rent, scheduledRaisePercent).raise} after 11 months)
                   </div>
                 )}
               </div>
+
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button 
@@ -555,7 +807,7 @@ export default function TenantManager({
                   className="btn btn-primary"
                   style={{ flexGrow: 1 }}
                 >
-                  Add Tenant
+                  Register Agreement
                 </button>
               </div>
             </form>
@@ -643,6 +895,48 @@ export default function TenantManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Document Preview Lightbox Modal */}
+      {previewFile && (
+        <div className="modal-overlay" style={{ zIndex: 3000 }} onClick={() => setPreviewFile(null)}>
+          <div className="modal-content" style={{ maxWidth: '800px', width: '95%' }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">📄 Preview: {previewFile.name}</h3>
+              <button 
+                onClick={() => setPreviewFile(null)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ 
+              backgroundColor: '#f5f3f0', 
+              padding: '12px', 
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '250px'
+            }}>
+              {previewFile.type && previewFile.type.startsWith('image') ? (
+                <img 
+                  src={previewFile.data} 
+                  alt="Document Preview" 
+                  style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: 'var(--radius-sm)', boxShadow: '0 4px 10px rgba(0,0,0,0.15)' }} 
+                />
+              ) : previewFile.type && previewFile.type.includes('pdf') ? (
+                <PdfInlinePreview pdfData={previewFile.data} />
+              ) : (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <FileText size={48} style={{ color: 'var(--color-primary)', marginBottom: '8px' }} />
+                  <p style={{ fontWeight: '600' }}>Preview not available for this file type.</p>
+                  <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>File format: {previewFile.type || 'Unknown'}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
