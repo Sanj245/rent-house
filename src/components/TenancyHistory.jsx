@@ -1,6 +1,18 @@
 import React from 'react';
 import { Clipboard, Phone, Calendar, ArrowDownToLine, Users, DollarSign, Award, ArrowUpRight } from 'lucide-react';
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function TenancyHistory({ properties, tenants, pastTenants, ledger }) {
   const [selectedPropertyId, setSelectedPropertyId] = React.useState(
     properties.length > 0 ? properties[0].id : ''
@@ -72,8 +84,8 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
           <tr style="border-bottom:1px solid #e8e4dd;">
             <td style="padding:10px 8px;font-weight:700;">${t.name}</td>
             <td style="padding:10px 8px;color:#555;">${t.phone}</td>
-            <td style="padding:10px 8px;">${t.moveInDate}</td>
-            <td style="padding:10px 8px;font-weight:600;">${t.moveOutDate}</td>
+            <td style="padding:10px 8px;">${formatDateToDDMMYYYY(t.moveInDate)}</td>
+            <td style="padding:10px 8px;font-weight:600;">${formatDateToDDMMYYYY(t.moveOutDate)}</td>
             <td style="padding:10px 8px;text-align:right;font-weight:800;color:#3d6a54;">₹${Number(t.totalRentCollected).toLocaleString('en-IN')}</td>
           </tr>`).join('');
 
@@ -119,7 +131,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
         <div class="page">
           <div class="header">
             <div>
-              <div class="logo">🏠 Rent<span>Ease</span></div>
+              <div class="logo">🏠 Rent<span>Arc</span></div>
               <div style="font-size:11px;color:#888;margin-top:2px;">Private Local Landlord Ledger</div>
             </div>
             <div class="gen-date">
@@ -158,7 +170,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
               <tr style="border-bottom:1px solid #e8e4dd;">
                 <td style="font-weight:700;">${activeTenant.name}</td>
                 <td>${activeTenant.phone}</td>
-                <td>${activeTenant.moveInDate}</td>
+                <td>${formatDateToDDMMYYYY(activeTenant.moveInDate)}</td>
                 <td>₹${Number(activeTenant.securityDeposit).toLocaleString('en-IN')}</td>
                 <td style="text-align:right;font-weight:800;color:#3d6a54;">₹${Number(activeTenant.rent).toLocaleString('en-IN')}/mo</td>
               </tr>
@@ -174,7 +186,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
           </table>
 
           <div class="footer">
-            <span>RentEase — Private Local Landlord Ledger</span>
+            <span>RentArc — Private Local Landlord Ledger</span>
             <span>${property.name} • ${generatedOn}</span>
           </div>
         </div>
@@ -464,10 +476,10 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                               {tenant.phone}
                             </td>
                             <td style={{ padding: '12px 8px', color: 'var(--text-main)' }}>
-                              {tenant.moveInDate}
+                              {formatDateToDDMMYYYY(tenant.moveInDate)}
                             </td>
                             <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontWeight: '600' }}>
-                              {tenant.moveOutDate}
+                              {formatDateToDDMMYYYY(tenant.moveOutDate)}
                             </td>
                             <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)', fontSize: '1rem' }}>
                               ₹{tenant.totalRentCollected}

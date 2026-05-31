@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Home, Users, DollarSign, Settings, Download, Bell, Info, AlertTriangle, CheckCircle, X, History } from 'lucide-react';
 
 import PropertyManager from './components/PropertyManager';
@@ -6,193 +6,410 @@ import TenantManager from './components/TenantManager';
 import RentLedger from './components/RentLedger';
 import TenancyHistory from './components/TenancyHistory';
 import MobileApp from './components/mobile/MobileApp';
+import HouseCodeScreen from './components/HouseCodeScreen';
 import './mobile.css';
 
-import { getValue, setValue } from './db';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+
+import { subscribeToHouse, saveHouseData, readLegacyLocalData, clearLegacyLocalData } from './db';
+
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
 
 export default function App() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]       = useState(true);
   const [properties, setProperties] = useState([]);
   const [pastTenants, setPastTenants] = useState([]);
-  const [tenants, setTenants] = useState([]);
-  const [ledger, setLedger] = useState({});
+  const [tenants, setTenants]       = useState([]);
+  const [ledger, setLedger]         = useState({});
+  const [syncStatus, setSyncStatus] = useState('connecting'); // 'live' | 'offline' | 'connecting'
 
-  // 11-Month raise engine helper
+  // Always-current ref — avoids stale closures in action functions
+  const stateRef = useRef({ properties: [], tenants: [], ledger: {}, pastTenants: [] });
+  useEffect(() => {
+    stateRef.current = { properties, tenants, ledger, pastTenants };
+  }, [properties, tenants, ledger, pastTenants]);
+
+  const houseCode = localStorage.getItem('rentarc_house_code') || '';
+  const [showHouseSetup, setShowHouseSetup] = useState(!houseCode);
+
+  // ─── 11-Month Raise Engine ────────────────────────────────────────────────
   const checkTenantsRaise = (initialTenants) => {
     const todayStr = new Date().toISOString().split('T')[0];
     let updated = false;
-    
-    const checkedTenants = initialTenants.map(t => {
+    const checkedTenants = initialTenants.map((t) => {
       let temp = { ...t };
       let changed = false;
-
-      // Rent raise
-      if (temp.scheduledRaiseEffectiveDate && todayStr >= temp.scheduledRaiseEffectiveDate && !temp.raiseApplied) {
+      if (
+        temp.scheduledRaiseEffectiveDate &&
+        todayStr >= temp.scheduledRaiseEffectiveDate &&
+        !temp.raiseApplied
+      ) {
         const raiseAmt = Math.round((Number(temp.rent) * Number(temp.scheduledRaisePercent)) / 100);
-        const newRent = Number(temp.rent) + raiseAmt;
-        const history = temp.rentHistory || [{ date: temp.moveInDate, amount: temp.rent, reason: 'Starting Rent' }];
-        
-        temp.rent = newRent;
+        const newRent  = Number(temp.rent) + raiseAmt;
+        const history  = temp.rentHistory || [{ date: temp.moveInDate, amount: temp.rent, reason: 'Starting Rent' }];
+        temp.rent        = newRent;
         temp.raiseApplied = true;
-        temp.rentHistory = [
+        temp.rentHistory  = [
           ...history,
-          { 
-            date: temp.scheduledRaiseEffectiveDate, 
-            amount: newRent, 
-            reason: `Automatic ${temp.scheduledRaisePercent}% Raise Applied` 
-          }
+          { date: temp.scheduledRaiseEffectiveDate, amount: newRent, reason: `Automatic ${temp.scheduledRaisePercent}% Raise Applied` },
         ];
         changed = true;
       }
-
-      if (changed) {
-        updated = true;
-      }
+      if (changed) updated = true;
       return temp;
     });
-
-    if (updated) {
-      setValue('rentease_tenants', checkedTenants);
-    }
-    return checkedTenants;
+    return { tenants: checkedTenants, updated };
   };
 
-  // Hydrate states from IndexedDB / localStorage on mount
+  // ─── Firebase Subscription ────────────────────────────────────────────────
   useEffect(() => {
-    async function loadData() {
+    if (!houseCode) { setLoading(false); return; }
+    setSyncStatus('connecting');
+    let firstLoad = true;
+
+    const unsubscribe = subscribeToHouse(houseCode, async ({ exists, data, fromCache, error }) => {
+      if (error) {
+        setSyncStatus('offline');
+        if (firstLoad) { setLoading(false); firstLoad = false; }
+        return;
+      }
+
+      setSyncStatus(fromCache ? 'offline' : 'live');
+
+      if (!exists) {
+        // Brand-new house — migrate legacy data if available
+        const legacy  = readLegacyLocalData();
+        const initial = legacy || { properties: [], tenants: [], ledger: {}, pastTenants: [] };
+        await saveHouseData(houseCode, initial);
+        if (legacy) clearLegacyLocalData();
+        setProperties(initial.properties);
+        setTenants(initial.tenants);
+        setLedger(initial.ledger);
+        setPastTenants(initial.pastTenants);
+        stateRef.current = initial;
+        if (firstLoad) { setLoading(false); firstLoad = false; }
+        return;
+      }
+
+      const props       = data.properties  || [];
+      const rawTenants  = data.tenants     || [];
+      const ledg        = data.ledger      || {};
+      const past        = data.pastTenants || [];
+      const { tenants: checked, updated } = checkTenantsRaise(rawTenants);
+
+      setProperties(props);
+      setTenants(checked);
+      setLedger(ledg);
+      setPastTenants(past);
+      stateRef.current = { properties: props, tenants: checked, ledger: ledg, pastTenants: past };
+
+      // Save back only if raises were auto-applied
+      if (updated) {
+        await saveHouseData(houseCode, { properties: props, tenants: checked, ledger: ledg, pastTenants: past });
+      }
+      if (firstLoad) { setLoading(false); firstLoad = false; }
+    });
+
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [houseCode]);
+
+  // ─── Firestore Save Helper ────────────────────────────────────────────────
+  const saveToFirestore = async (overrides = {}) => {
+    const code = localStorage.getItem('rentarc_house_code');
+    if (!code) return;
+    const data = {
+      properties:  overrides.properties  !== undefined ? overrides.properties  : stateRef.current.properties,
+      tenants:     overrides.tenants     !== undefined ? overrides.tenants     : stateRef.current.tenants,
+      ledger:      overrides.ledger      !== undefined ? overrides.ledger      : stateRef.current.ledger,
+      pastTenants: overrides.pastTenants !== undefined ? overrides.pastTenants : stateRef.current.pastTenants,
+    };
+    try {
+      await saveHouseData(code, data);
+      setSyncStatus('live');
+    } catch (err) {
+      console.error('Firestore save error:', err);
+      setSyncStatus('offline');
+    }
+  };
+  // ─── Native / Web System Notification Engine ─────────────────────────────
+  const requestNotificationPermission = async () => {
+    if (Capacitor.isNativePlatform()) {
       try {
-        let props = await getValue('rentease_properties', null);
-        let tnts = await getValue('rentease_tenants', null);
-        let ledg = await getValue('rentease_ledger', null);
-        let past = await getValue('rentease_past_tenants', null);
-
-        // Fallback / migration from localStorage
-        if (props === null) {
-          const saved = localStorage.getItem('rentease_properties');
-          props = saved ? JSON.parse(saved) : [];
-          if (props.length > 0) await setValue('rentease_properties', props);
+        const perm = await LocalNotifications.checkPermissions();
+        if (perm.display !== 'granted') {
+          return await LocalNotifications.requestPermissions();
         }
-        if (tnts === null) {
-          const saved = localStorage.getItem('rentease_tenants');
-          tnts = saved ? JSON.parse(saved) : [];
-          if (tnts.length > 0) await setValue('rentease_tenants', tnts);
-        }
-        if (ledg === null) {
-          const saved = localStorage.getItem('rentease_ledger');
-          ledg = saved ? JSON.parse(saved) : {};
-          if (Object.keys(ledg).length > 0) await setValue('rentease_ledger', ledg);
-        }
-        if (past === null) {
-          const saved = localStorage.getItem('rentease_past_tenants');
-          past = saved ? JSON.parse(saved) : [];
-          if (past.length > 0) await setValue('rentease_past_tenants', past);
-        }
-
-        if (props) setProperties(props);
-        if (tnts) setTenants(checkTenantsRaise(tnts));
-        if (ledg) setLedger(ledg);
-        if (past) setPastTenants(past);
+        return perm;
       } catch (err) {
-        console.error("Error loading data from IndexedDB:", err);
-      } finally {
-        setLoading(false);
+        console.error('Error requesting local notifications permission:', err);
+      }
+    } else {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        return await Notification.requestPermission();
       }
     }
-    loadData();
+  };
+
+  const triggerSystemNotification = async (id, title, body) => {
+    // Only send notifications if signed in (houseCode is present)
+    const code = localStorage.getItem('rentarc_house_code');
+    if (!code) return;
+
+    const storageKey = `sys-notif-${id}`;
+    if (localStorage.getItem(storageKey)) return;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const perm = await LocalNotifications.checkPermissions();
+        if (perm.display === 'granted') {
+          // Generate a unique 32-bit integer ID for the local notification
+          let intId = 0;
+          for (let i = 0; i < id.length; i++) {
+            intId = (intId << 5) - intId + id.charCodeAt(i);
+            intId |= 0;
+          }
+          intId = Math.abs(intId);
+
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                title: title,
+                body: body,
+                id: intId,
+                schedule: { at: new Date(Date.now() + 100) }, // schedule almost immediately
+                sound: 'default',
+              }
+            ]
+          });
+          localStorage.setItem(storageKey, 'triggered');
+        }
+      } catch (err) {
+        console.error('Failed to trigger Capacitor local notification:', err);
+      }
+    } else {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          try {
+            new Notification(title, {
+              body: body,
+              icon: '/favicon.ico'
+            });
+            localStorage.setItem(storageKey, 'triggered');
+          } catch (err) {
+            console.error('Failed to trigger native notification:', err);
+          }
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    const initPermissions = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const perm = await LocalNotifications.checkPermissions();
+          if (perm.display === 'default') {
+            await LocalNotifications.requestPermissions();
+          }
+        } catch (err) {
+          console.error('Error checking local notification permissions:', err);
+        }
+      } else {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission === 'default') {
+            Notification.requestPermission();
+          }
+        }
+      }
+    };
+    initPermissions();
   }, []);
 
-  // Navigation State
-  const [currentTab, setCurrentTab] = useState('ledger');
-  const [showNotifications, setShowNotifications] = useState(false);
+  useEffect(() => {
+    const code = localStorage.getItem('rentarc_house_code');
+    if (!code || tenants.length === 0) return;
 
-  // Dynamic notifications list
-  const getNotifications = () => {
-    const list = [];
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-    // Rent raises only
-    tenants.forEach(t => {
-      // Upcoming
+    const getPropName = (propertyId) => {
+      const p = properties.find(prop => prop.id === propertyId);
+      return p ? p.name : 'Rental Property';
+    };
+
+    tenants.forEach((t) => {
+      // 1. Rent Increase Notification (On first day of the increase month)
       if (t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
         const raiseDate = new Date(t.scheduledRaiseEffectiveDate);
-        const diffTime = raiseDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays <= 30 && diffDays >= 0) {
-          const raiseAmt = Math.round((Number(t.rent) * Number(t.scheduledRaisePercent)) / 100);
-          const previewRent = Number(t.rent) + raiseAmt;
-          list.push({
-            id: `upcoming-raise-${t.id}`,
-            title: `Rent Increase Scheduled`,
-            message: `${t.name}'s rent will raise by ${t.scheduledRaisePercent}% to ₹${previewRent} on ${t.scheduledRaiseEffectiveDate} (${diffDays} days left).`,
-            type: 'upcoming-raise',
-            date: t.scheduledRaiseEffectiveDate
-          });
+        if (today >= raiseDate) {
+          const baseRent = t.rentHistory && t.rentHistory[0] ? Number(t.rentHistory[0].amount) : Number(t.rent);
+          const raisePercent = Number(t.scheduledRaisePercent || 10);
+          const raisedRent = baseRent + Math.round((baseRent * raisePercent) / 100);
+
+          triggerSystemNotification(
+            `raise-${t.id}-${t.scheduledRaiseEffectiveDate}`,
+            `📈 Rent Increase Active!`,
+            `Rent for ${t.name} at ${getPropName(t.propertyId)} has automatically raised to ₹${raisedRent} starting today.`
+          );
         }
       }
-      // Recent applied raise
-      if (t.raiseApplied && t.rentHistory) {
-        const latestRaise = t.rentHistory.find(h => h.reason && h.reason.includes('Raise Applied'));
-        if (latestRaise) {
-          const raiseDate = new Date(latestRaise.date);
-          const diffTime = today - raiseDate;
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays <= 30 && diffDays >= 0) {
-            list.push({
-              id: `recent-raise-${t.id}`,
-              title: `🎉 Rent Increase Applied`,
-              message: `Rent for ${t.name} was automatically increased to ₹${t.rent} starting ${latestRaise.date} (${diffDays} days ago).`,
-              type: 'recent-raise',
-              date: latestRaise.date
-            });
-          }
-        }
-      }
-    });
 
-    // 2. Repairs
-    properties.forEach(p => {
-      if (p.items) {
-        Object.entries(p.items).forEach(([item, condition]) => {
-          if (condition === 'Needs Repair') {
-            list.push({
-              id: `repair-${p.id}-${item}`,
-              title: `🛠️ Repair Needed`,
-              message: `"${item}" at ${p.name} needs repair.`,
-              type: 'repair',
-              date: todayStr
-            });
-          }
-        });
-      }
-    });
-
-    // 3. Rent Due for current month
-    const monthsKeys = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const currentMonthIndex = today.getMonth();
-    const currentMonthKey = monthsKeys[currentMonthIndex];
-    tenants.forEach(t => {
-      const tenantPayments = ledger[t.id] || {};
-      const currentPay = tenantPayments[currentMonthKey];
-      
+      // 2. Overdue Notifications (5 and 10 days after the due date)
       if (t.moveInDate) {
-        const moveInParts = t.moveInDate.split('-');
-        if (moveInParts.length >= 2) {
-          const moveInMonth = parseInt(moveInParts[1], 10);
-          if (currentMonthIndex + 1 >= moveInMonth) {
-            let isUnmarked = !currentPay;
-            if (currentPay) {
-              if (typeof currentPay === 'string') {
-                isUnmarked = currentPay !== 'Paid' && currentPay !== 'Unpaid' && currentPay !== 'Partial';
-              } else {
-                isUnmarked = currentPay.status !== 'Paid' && currentPay.status !== 'Partial';
-              }
+        const parts = t.moveInDate.split('-');
+        const moveInYear = parseInt(parts[0], 10);
+        const moveInMonth = parseInt(parts[1], 10);
+
+        const startAbsolute = (moveInYear - 2020) * 12 + (moveInMonth - 1);
+        const currentAbsolute = (today.getFullYear() - 2020) * 12 + today.getMonth();
+
+        const tenantPayments = ledger[t.id] || {};
+
+        for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
+          const y = 2020 + Math.floor(abs / 12);
+          const m = abs % 12;
+          const monthKey = monthsKeysList[m];
+          const monthName = monthsNamesList[m];
+          const timelineKey = `${monthKey}-${y}`;
+
+          // Due date is 10th of the next month
+          let dueMonthIdx = m + 1;
+          let dueYear = y;
+          if (dueMonthIdx > 11) {
+            dueMonthIdx = 0;
+            dueYear += 1;
+          }
+          const dueDate = new Date(dueYear, dueMonthIdx, 10);
+
+          // Check if rent is unpaid/unmarked
+          const payData = tenantPayments[timelineKey] !== undefined
+            ? tenantPayments[timelineKey]
+            : (y === 2026 ? tenantPayments[monthKey] : undefined);
+
+          let isOverdue = !payData;
+          if (payData) {
+            isOverdue = typeof payData === 'string'
+              ? payData !== 'Paid'
+              : payData.status !== 'Paid';
+          }
+
+          if (isOverdue) {
+            // Calculate delay in days
+            const diffTime = today - dueDate;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays >= 10) {
+              triggerSystemNotification(
+                `overdue-10-${t.id}-${timelineKey}`,
+                `🚨 Rent Overdue (10 Days)`,
+                `Rent for ${t.name} (${monthName} ${y}) is 10 days overdue. Due date was 10th ${monthsNamesList[dueMonthIdx]} ${dueYear}.`
+              );
+            } else if (diffDays >= 5) {
+              triggerSystemNotification(
+                `overdue-5-${t.id}-${timelineKey}`,
+                `⚠️ Rent Overdue (5 Days)`,
+                `Rent for ${t.name} (${monthName} ${y}) is 5 days overdue. Due date was 10th ${monthsNamesList[dueMonthIdx]} ${dueYear}.`
+              );
             }
+          }
+        }
+      }
+    });
+  }, [tenants, ledger, properties]);
+  // ─── Navigation ───────────────────────────────────────────────────────────
+  const [currentTab, setCurrentTab]           = useState('ledger');
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // ─── Notifications ────────────────────────────────────────────────────────
+  const getNotifications = () => {
+    const list      = [];
+    const today     = new Date();
+    const todayStr  = today.toISOString().split('T')[0];
+    const monthsKeys = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const currentMonthIndex = today.getMonth();
+    const currentMonthKey   = monthsKeys[currentMonthIndex];
+    const currentYear       = today.getFullYear();
+
+    tenants.forEach((t) => {
+      if (t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
+        const raiseDate = new Date(t.scheduledRaiseEffectiveDate);
+        const diffDays  = Math.ceil((raiseDate - today) / (1000 * 60 * 60 * 24));
+        if (diffDays <= 30 && diffDays >= 0) {
+          const raiseAmt    = Math.round((Number(t.rent) * Number(t.scheduledRaisePercent)) / 100);
+          const previewRent = Number(t.rent) + raiseAmt;
+          list.push({ id: `upcoming-raise-${t.id}`, title: 'Rent Increase Scheduled', message: `${t.name}'s rent will raise by ${t.scheduledRaisePercent}% to ₹${previewRent} on ${t.scheduledRaiseEffectiveDate} (${diffDays} days left).`, type: 'upcoming-raise', date: t.scheduledRaiseEffectiveDate });
+        }
+      }
+      if (t.raiseApplied && t.rentHistory) {
+        const latestRaise = t.rentHistory.find((h) => h.reason && h.reason.includes('Raise Applied'));
+        if (latestRaise) {
+          const diffDays = Math.ceil((today - new Date(latestRaise.date)) / (1000 * 60 * 60 * 24));
+          if (diffDays <= 30 && diffDays >= 0) {
+            list.push({ id: `recent-raise-${t.id}`, title: '🎉 Rent Increase Applied', message: `Rent for ${t.name} was automatically increased to ₹${t.rent} starting ${latestRaise.date} (${diffDays} days ago).`, type: 'recent-raise', date: latestRaise.date });
+          }
+        }
+      }
+      const tenantPayments = ledger[t.id] || {};
+
+      if (t.moveInDate) {
+        const parts = t.moveInDate.split('-');
+        const moveInYear = parseInt(parts[0], 10);
+        const moveInMonth = parseInt(parts[1], 10); // 1-indexed
+
+        const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+        const startAbsolute = (moveInYear - 2020) * 12 + (moveInMonth - 1);
+        const currentAbsolute = (currentYear - 2020) * 12 + currentMonthIndex;
+
+        for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
+          const y = 2020 + Math.floor(abs / 12);
+          const m = abs % 12;
+          const monthKey = monthsKeysList[m];
+          const monthName = monthsNamesList[m];
+          const timelineKey = `${monthKey}-${y}`;
+
+          // Due date is 10th of the next month
+          let dueMonthIdx = m + 1;
+          let dueYear = y;
+          if (dueMonthIdx > 11) {
+            dueMonthIdx = 0;
+            dueYear += 1;
+          }
+          const dueDate = new Date(dueYear, dueMonthIdx, 10);
+
+          // Only alert if today is on or after the due date (10th of next month)
+          if (today >= dueDate) {
+            const payData = tenantPayments[timelineKey] !== undefined
+              ? tenantPayments[timelineKey]
+              : (y === 2026 ? tenantPayments[monthKey] : undefined);
+
+            let isUnmarked = !payData;
+            if (payData) {
+              isUnmarked = typeof payData === 'string'
+                ? payData !== 'Paid' && payData !== 'Unpaid' && payData !== 'Partial'
+                : payData.status !== 'Paid' && payData.status !== 'Partial';
+            }
+
             if (isUnmarked) {
+              const formattedDueDate = `10th ${monthsNamesList[dueMonthIdx]} ${dueYear}`;
               list.push({
-                id: `due-${t.id}-${currentMonthKey}`,
-                title: `💰 Rent Pending`,
-                message: `Rent for ${t.name} is due for ${currentMonthKey}.`,
+                id: `due-${t.id}-${timelineKey}`,
+                title: '💰 Rent Overdue',
+                message: `Rent for ${t.name} (${monthName} ${y}) was due on ${formattedDueDate} and is still pending.`,
                 type: 'due',
                 date: todayStr
               });
@@ -202,491 +419,615 @@ export default function App() {
       }
     });
 
+    properties.forEach((p) => {
+      if (p.items) {
+        Object.entries(p.items).forEach(([item, condition]) => {
+          if (condition === 'Needs Repair') {
+            list.push({ id: `repair-${p.id}-${item}`, title: '🛠️ Repair Needed', message: `"${item}" at ${p.name} needs repair.`, type: 'repair', date: todayStr });
+          }
+        });
+      }
+    });
+
     return list;
   };
 
   const notifications = getNotifications();
 
-  // Sync to IndexedDB
-  useEffect(() => {
-    if (!loading) {
-      setValue('rentease_properties', properties);
-    }
-  }, [properties, loading]);
-
-  useEffect(() => {
-    if (!loading) {
-      setValue('rentease_tenants', tenants);
-    }
-  }, [tenants, loading]);
-
-  useEffect(() => {
-    if (!loading) {
-      setValue('rentease_ledger', ledger);
-    }
-  }, [ledger, loading]);
-
-  useEffect(() => {
-    if (!loading) {
-      setValue('rentease_past_tenants', pastTenants);
-    }
-  }, [pastTenants, loading]);
-
-  // Operations
+  // ─── Action Functions ─────────────────────────────────────────────────────
   const addProperty = (newProp) => {
-    const propId = `prop-${Date.now()}`;
-    setProperties(prev => [...prev, { ...newProp, id: propId }]);
+    const propId       = `prop-${Date.now()}`;
+    const newProperties = [...stateRef.current.properties, { ...newProp, id: propId }];
+    setProperties(newProperties);
+    saveToFirestore({ properties: newProperties });
   };
 
   const editProperty = (id, updatedProp) => {
-    setProperties(prev => prev.map(p => p.id === id ? { ...p, ...updatedProp } : p));
+    const newProperties = stateRef.current.properties.map((p) => p.id === id ? { ...p, ...updatedProp } : p);
+    setProperties(newProperties);
+    saveToFirestore({ properties: newProperties });
   };
 
   const deleteProperty = (id) => {
-    setProperties(prev => prev.filter(p => p.id !== id));
-    const associatedTenant = tenants.find(t => t.propertyId === id);
+    const newProperties        = stateRef.current.properties.filter((p) => p.id !== id);
+    const associatedTenant     = stateRef.current.tenants.find((t) => t.propertyId === id);
+    let newTenants             = stateRef.current.tenants;
+    let newLedger              = stateRef.current.ledger;
+    let newPastTenants         = stateRef.current.pastTenants;
+
     if (associatedTenant) {
-      removeTenant(associatedTenant.id, id);
+      const tenantPayments = stateRef.current.ledger[associatedTenant.id] || {};
+      let totalRentCollected = 0;
+      Object.values(tenantPayments).forEach((pay) => {
+        if (!pay) return;
+        if (typeof pay === 'string' && pay === 'Paid') totalRentCollected += Number(associatedTenant.rent);
+        else if (typeof pay === 'object') {
+          if (pay.status === 'Paid')    totalRentCollected += Number(pay.paid || pay.rentDue || associatedTenant.rent);
+          if (pay.status === 'Partial') totalRentCollected += Number(pay.paid || 0);
+        }
+      });
+      const pastRecord = {
+        id: `${associatedTenant.id}-past-${Date.now()}`,
+        name: associatedTenant.name, phone: associatedTenant.phone,
+        propertyId: associatedTenant.propertyId,
+        propertyName: stateRef.current.properties.find((p) => p.id === associatedTenant.propertyId)?.name || 'Unknown',
+        moveInDate: associatedTenant.moveInDate, moveOutDate: new Date().toISOString().split('T')[0],
+        totalRentCollected, securityDeposit: associatedTenant.securityDeposit, rent: associatedTenant.rent,
+      };
+      newPastTenants = [...stateRef.current.pastTenants, pastRecord];
+      newTenants     = stateRef.current.tenants.filter((t) => t.id !== associatedTenant.id);
+      newLedger      = { ...stateRef.current.ledger };
+      delete newLedger[associatedTenant.id];
     }
+
+    setProperties(newProperties);
+    setTenants(newTenants);
+    setLedger(newLedger);
+    setPastTenants(newPastTenants);
+    saveToFirestore({ properties: newProperties, tenants: newTenants, ledger: newLedger, pastTenants: newPastTenants });
   };
 
   const addTenant = (newTenant) => {
-    const tenantId = `tenant-${Date.now()}`;
-    const todayStr = new Date().toISOString().split('T')[0];
-    
-    let processedTenant = { ...newTenant, id: tenantId };
-    
-    // If scheduled raise effective date is today or in the past, apply immediately
-    if (processedTenant.scheduledRaiseEffectiveDate && todayStr >= processedTenant.scheduledRaiseEffectiveDate && !processedTenant.raiseApplied) {
-      const raiseAmt = Math.round((Number(processedTenant.rent) * Number(processedTenant.scheduledRaisePercent)) / 100);
-      const newRent = Number(processedTenant.rent) + raiseAmt;
-      const history = processedTenant.rentHistory || [{ date: processedTenant.moveInDate, amount: processedTenant.rent, reason: 'Starting Rent' }];
-      
-      processedTenant = {
-        ...processedTenant,
-        rent: newRent,
-        raiseApplied: true,
-        rentHistory: [
-          ...history,
-          { 
-            date: processedTenant.scheduledRaiseEffectiveDate, 
-            amount: newRent, 
-            reason: `Automatic ${processedTenant.scheduledRaisePercent}% Rent Raise Applied` 
-          }
-        ]
-      };
+    const tenantId  = `tenant-${Date.now()}`;
+    const todayStr  = new Date().toISOString().split('T')[0];
+    let processed   = { ...newTenant, id: tenantId };
+
+    if (processed.scheduledRaiseEffectiveDate && todayStr >= processed.scheduledRaiseEffectiveDate && !processed.raiseApplied) {
+      const raiseAmt = Math.round((Number(processed.rent) * Number(processed.scheduledRaisePercent)) / 100);
+      const newRent  = Number(processed.rent) + raiseAmt;
+      const history  = processed.rentHistory || [{ date: processed.moveInDate, amount: processed.rent, reason: 'Starting Rent' }];
+      processed = { ...processed, rent: newRent, raiseApplied: true, rentHistory: [...history, { date: processed.scheduledRaiseEffectiveDate, amount: newRent, reason: `Automatic ${processed.scheduledRaisePercent}% Rent Raise Applied` }] };
     }
 
+    const newTenants    = [...stateRef.current.tenants, processed];
+    const newProperties = stateRef.current.properties.map((p) => p.id === newTenant.propertyId ? { ...p, status: 'Occupied' } : p);
+    const newLedger     = { ...stateRef.current.ledger, [tenantId]: {} };
 
-    setTenants(prev => [...prev, processedTenant]);
-    setProperties(prev => prev.map(p => p.id === newTenant.propertyId ? { ...p, status: 'Occupied' } : p));
-    setLedger(prev => ({ ...prev, [tenantId]: {} }));
+    setTenants(newTenants);
+    setProperties(newProperties);
+    setLedger(newLedger);
+    saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger });
   };
 
   const removeTenant = (tenantId, propertyId) => {
-    const tenant = tenants.find(t => t.id === tenantId);
+    const tenant       = stateRef.current.tenants.find((t) => t.id === tenantId);
+    let newPastTenants = stateRef.current.pastTenants;
+
     if (tenant) {
-      const tenantPayments = ledger[tenantId] || {};
+      const tenantPayments = stateRef.current.ledger[tenantId] || {};
       let totalRentCollected = 0;
-      Object.values(tenantPayments).forEach(pay => {
-        if (pay) {
-          if (typeof pay === 'string' && pay === 'Paid') {
-            totalRentCollected += Number(tenant.rent);
-          } else if (typeof pay === 'object') {
-            if (pay.status === 'Paid') {
-              totalRentCollected += Number(pay.paid || pay.rentDue || tenant.rent);
-            } else if (pay.status === 'Partial') {
-              totalRentCollected += Number(pay.paid || 0);
-            }
-          }
+      Object.values(tenantPayments).forEach((pay) => {
+        if (!pay) return;
+        if (typeof pay === 'string' && pay === 'Paid') totalRentCollected += Number(tenant.rent);
+        else if (typeof pay === 'object') {
+          if (pay.status === 'Paid')    totalRentCollected += Number(pay.paid || pay.rentDue || tenant.rent);
+          if (pay.status === 'Partial') totalRentCollected += Number(pay.paid || 0);
         }
       });
-
-      const todayStr = new Date().toISOString().split('T')[0];
       const pastRecord = {
         id: `${tenant.id}-past-${Date.now()}`,
-        name: tenant.name,
-        phone: tenant.phone,
+        name: tenant.name, phone: tenant.phone,
         propertyId: tenant.propertyId,
-        propertyName: properties.find(p => p.id === tenant.propertyId)?.name || 'Unknown',
-        moveInDate: tenant.moveInDate,
-        moveOutDate: todayStr,
-        totalRentCollected: totalRentCollected,
-        securityDeposit: tenant.securityDeposit,
-        rent: tenant.rent
+        propertyName: stateRef.current.properties.find((p) => p.id === tenant.propertyId)?.name || 'Unknown',
+        moveInDate: tenant.moveInDate, moveOutDate: new Date().toISOString().split('T')[0],
+        totalRentCollected, securityDeposit: tenant.securityDeposit, rent: tenant.rent,
       };
-      setPastTenants(prev => [...prev, pastRecord]);
+      newPastTenants = [...stateRef.current.pastTenants, pastRecord];
     }
 
-    setTenants(prev => prev.filter(t => t.id !== tenantId));
-    setProperties(prev => prev.map(p => p.id === propertyId ? { ...p, status: 'Vacant' } : p));
-    setLedger(prev => {
-      const copy = { ...prev };
-      delete copy[tenantId];
-      return copy;
-    });
+    const newTenants    = stateRef.current.tenants.filter((t) => t.id !== tenantId);
+    const newProperties = stateRef.current.properties.map((p) => p.id === propertyId ? { ...p, status: 'Vacant' } : p);
+    const newLedger     = { ...stateRef.current.ledger };
+    delete newLedger[tenantId];
+
+    setTenants(newTenants);
+    setProperties(newProperties);
+    setLedger(newLedger);
+    setPastTenants(newPastTenants);
+    saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger, pastTenants: newPastTenants });
   };
 
   const scheduleRentRaise = (tenantId, percent, effectiveDate) => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    
-    setTenants(prev => prev.map(t => {
-      if (t.id === tenantId) {
-        let updatedTenant = {
-          ...t,
-          scheduledRaisePercent: Number(percent),
-          scheduledRaiseEffectiveDate: effectiveDate,
-          raiseApplied: false
-        };
-        
-        // If the scheduled date is today/past, apply raise instantly
-        if (effectiveDate && todayStr >= effectiveDate) {
-          const raiseAmt = Math.round((Number(updatedTenant.rent) * Number(percent)) / 100);
-          const newRent = Number(updatedTenant.rent) + raiseAmt;
-          const history = updatedTenant.rentHistory || [{ date: updatedTenant.moveInDate, amount: updatedTenant.rent, reason: 'Starting Rent' }];
-          
-          updatedTenant = {
-            ...updatedTenant,
-            rent: newRent,
-            raiseApplied: true,
-            rentHistory: [
-              ...history,
-              { 
-                date: effectiveDate, 
-                amount: newRent, 
-                reason: `Automatic ${percent}% Raise Applied` 
-              }
-            ]
-          };
-          alert(`🎉 Raise Applied Immediately!\n\nThe effective date is in the past/today, so rent was increased to ₹${newRent}.`);
-        } else {
-          alert(`📅 Raise Scheduled Successfully!\n\nAn automatic ${percent}% raise is scheduled for ${effectiveDate}.`);
-        }
-        return updatedTenant;
+    const todayStr  = new Date().toISOString().split('T')[0];
+    const newTenants = stateRef.current.tenants.map((t) => {
+      if (t.id !== tenantId) return t;
+      let updated = { ...t, scheduledRaisePercent: Number(percent), scheduledRaiseEffectiveDate: effectiveDate, raiseApplied: false };
+      if (effectiveDate && todayStr >= effectiveDate) {
+        const raiseAmt = Math.round((Number(updated.rent) * Number(percent)) / 100);
+        const newRent  = Number(updated.rent) + raiseAmt;
+        const history  = updated.rentHistory || [{ date: updated.moveInDate, amount: updated.rent, reason: 'Starting Rent' }];
+        updated = { ...updated, rent: newRent, raiseApplied: true, rentHistory: [...history, { date: effectiveDate, amount: newRent, reason: `Automatic ${percent}% Raise Applied` }] };
+        alert(`🎉 Raise Applied Immediately!\n\nThe effective date is in the past/today, so rent was increased to ₹${newRent}.`);
+      } else {
+        alert(`📅 Raise Scheduled Successfully!\n\nAn automatic ${percent}% raise is scheduled for ${effectiveDate}.`);
       }
-      return t;
-    }));
+      return updated;
+    });
+    setTenants(newTenants);
+    saveToFirestore({ tenants: newTenants });
   };
 
   const updatePaymentStatus = (tenantId, monthKey, statusDetails) => {
-    setLedger(prev => {
-      const tenantHistory = prev[tenantId] || {};
-      return {
-        ...prev,
-        [tenantId]: {
-          ...tenantHistory,
-          [monthKey]: statusDetails
-        }
-      };
-    });
+    const newLedger = {
+      ...stateRef.current.ledger,
+      [tenantId]: { ...(stateRef.current.ledger[tenantId] || {}), [monthKey]: statusDetails },
+    };
+    setLedger(newLedger);
+    saveToFirestore({ ledger: newLedger });
   };
 
   const updateTenantNotes = (tenantId, notes) => {
-    setTenants(prev => prev.map(t => {
-      if (t.id === tenantId) {
-        return { ...t, notes };
-      }
-      return t;
-    }));
+    const newTenants = stateRef.current.tenants.map((t) => t.id === tenantId ? { ...t, notes } : t);
+    setTenants(newTenants);
+    saveToFirestore({ tenants: newTenants });
   };
 
   const handleExportData = () => {
-    const dataStr = JSON.stringify({ properties, tenants, ledger }, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', `RentEase-Backup.json`);
-    linkElement.click();
+    const dataStr  = JSON.stringify({ properties, tenants, ledger }, null, 2);
+    const dataUri  = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    const link     = document.createElement('a');
+    link.setAttribute('href', dataUri);
+    link.setAttribute('download', 'RentArc-Backup.json');
+    link.click();
   };
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const loadDemoData = async () => {
+    const doubleCheck = window.confirm(
+      "⚠️ Load Mock Demo Data?\n\nThis will populate your current house code with realistic mock properties, tenant agreements, payment ledgers, and past histories for comprehensive feature testing.\n\nAny existing data under this house code will be overwritten. Continue?"
+    );
+    if (!doubleCheck) return;
 
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+    const today = new Date();
+    const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    
+    // 1. Mock Properties
+    const demoProperties = [
+      {
+        id: "prop-demo-1",
+        name: "Apartment 302, Emerald Heights",
+        address: "5th Main Road, Indiranagar, Bengaluru",
+        rooms: "3",
+        status: "Occupied",
+        isCashOnly: false,
+        accountName: "HDFC Bank - 501004921",
+        images: [
+          {
+            id: "img-demo-ac",
+            name: "Living Room AC",
+            data: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='50' viewBox='0 0 100 50'><rect width='100' height='50' rx='5' fill='%236c7a89'/><text x='50' y='30' font-family='sans-serif' font-size='12' fill='white' text-anchor='middle'>AC Attached</text></svg>"
+          }
+        ],
+        items: {
+          "Kitchen Chimney": "Excellent",
+          "AC Unit": "Needs Repair",
+          "Geyser": "Good"
+        }
+      },
+      {
+        id: "prop-demo-2",
+        name: "Cozy Haven Villa",
+        address: "Koramangala 3rd Block, Bengaluru",
+        rooms: "4",
+        status: "Occupied",
+        isCashOnly: true,
+        accountName: "None",
+        images: [],
+        items: {
+          "Refrigerator": "Good",
+          "Washing Machine": "Good"
+        }
+      },
+      {
+        id: "prop-demo-3",
+        name: "Penthouse 10B, Azure Tower",
+        address: "Outer Ring Road, Marathahalli, Bengaluru",
+        rooms: "2",
+        status: "Vacant",
+        isCashOnly: false,
+        accountName: "SBI Savings - 30294821",
+        images: [],
+        items: {
+          "Smart Lock": "Excellent"
+        }
+      }
+    ];
+
+    // 2. Mock Active Tenants
+    const moveIn1 = new Date(today.getFullYear(), today.getMonth() - 11, 1).toISOString().split('T')[0];
+    const moveIn2 = new Date(today.getFullYear(), today.getMonth() - 3, 10).toISOString().split('T')[0];
+
+    const getRaiseDate = (dateStr) => {
+      const d = new Date(dateStr);
+      d.setMonth(d.getMonth() + 11);
+      return d.toISOString().split('T')[0];
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    const demoTenants = [
+      {
+        id: "tenant-demo-1",
+        propertyId: "prop-demo-1",
+        name: "Aarav Sharma",
+        phone: "9876543210",
+        altPhone: "9876543211",
+        description: "IT Professional at TechCorp. Stays with family. Extremely punctual.",
+        securityDeposit: 30000,
+        rent: 20000,
+        moveInDate: moveIn1,
+        scheduledRaisePercent: 10,
+        scheduledRaiseEffectiveDate: getRaiseDate(moveIn1),
+        raiseApplied: today >= new Date(getRaiseDate(moveIn1)),
+        rentHistory: [
+          { date: moveIn1, amount: 20000, reason: "Starting Rent" }
+        ],
+        photo: null,
+        aadharFile: null,
+        agreementFile: null
+      },
+      {
+        id: "tenant-demo-2",
+        propertyId: "prop-demo-2",
+        name: "Priya Patel",
+        phone: "8765432109",
+        altPhone: "None",
+        description: "Consultant at BigFour. Single occupant.",
+        securityDeposit: 25000,
+        rent: 15000,
+        moveInDate: moveIn2,
+        scheduledRaisePercent: 8,
+        scheduledRaiseEffectiveDate: getRaiseDate(moveIn2),
+        raiseApplied: false,
+        rentHistory: [
+          { date: moveIn2, amount: 15000, reason: "Starting Rent" }
+        ],
+        photo: null,
+        aadharFile: null,
+        agreementFile: null
+      }
+    ];
+
+    if (demoTenants[0].raiseApplied) {
+      demoTenants[0].rent = 22000;
+      demoTenants[0].rentHistory.push({
+        date: demoTenants[0].scheduledRaiseEffectiveDate,
+        amount: 22000,
+        reason: "Automatic 10% Raise Applied"
+      });
+    }
+
+    // 3. Mock Ledger Payments
+    const demoLedger = {
+      "tenant-demo-1": {},
+      "tenant-demo-2": {}
+    };
+
+    const t1MoveInDate = new Date(moveIn1);
+    for (let i = 0; i <= 11; i++) {
+      const d = new Date(t1MoveInDate.getFullYear(), t1MoveInDate.getMonth() + i, 1);
+      if (d > today) break;
+      const monthKey = monthsKeysList[d.getMonth()];
+      const year = d.getFullYear();
+      const timelineKey = `${monthKey}-${year}`;
+      
+      const isRaiseMonth = d >= new Date(demoTenants[0].scheduledRaiseEffectiveDate);
+      const computedRent = isRaiseMonth ? 22000 : 20000;
+
+      if (i < 9) {
+        demoLedger["tenant-demo-1"][timelineKey] = {
+          status: "Paid",
+          rentDue: computedRent,
+          paid: computedRent,
+          datePaid: new Date(year, d.getMonth(), 5).toISOString().split('T')[0],
+          paymentMethod: "UPI",
+          receivedBy: "SBI Savings - 30294821",
+          notes: "Automated monthly payment"
+        };
+      } else if (i === 9) {
+        demoLedger["tenant-demo-1"][timelineKey] = {
+          status: "Partial",
+          rentDue: computedRent,
+          paid: computedRent - 5000,
+          remaining: 5000,
+          datePaid: new Date(year, d.getMonth(), 8).toISOString().split('T')[0],
+          paymentMethod: "UPI",
+          receivedBy: "SBI Savings - 30294821",
+          notes: "Told will pay remaining tomorrow"
+        };
+      }
+    }
+
+    const t2MoveInDate = new Date(moveIn2);
+    for (let i = 0; i <= 3; i++) {
+      const d = new Date(t2MoveInDate.getFullYear(), t2MoveInDate.getMonth() + i, 10);
+      if (d > today) break;
+      const monthKey = monthsKeysList[d.getMonth()];
+      const year = d.getFullYear();
+      const timelineKey = `${monthKey}-${year}`;
+
+      if (i < 2) {
+        demoLedger["tenant-demo-2"][timelineKey] = {
+          status: "Paid",
+          rentDue: 15000,
+          paid: 15000,
+          datePaid: new Date(year, d.getMonth(), 10).toISOString().split('T')[0],
+          paymentMethod: "Cash",
+          receivedBy: "Landlord",
+          notes: "Paid in cash"
+        };
+      }
+    }
+
+    // 4. Mock Past Tenancy History
+    const demoPastTenants = [
+      {
+        id: "past-demo-1",
+        name: "Rohan Verma",
+        phone: "9988776655",
+        propertyId: "prop-demo-1",
+        propertyName: "Apartment 302, Emerald Heights",
+        moveInDate: "2024-01-01",
+        moveOutDate: "2024-11-30",
+        totalRentCollected: 220000,
+        securityDeposit: 30000,
+        rent: 20000
+      }
+    ];
+
+    setProperties(demoProperties);
+    setTenants(demoTenants);
+    setLedger(demoLedger);
+    setPastTenants(demoPastTenants);
+
+    await saveHouseData(houseCode, {
+      properties: demoProperties,
+      tenants: demoTenants,
+      ledger: demoLedger,
+      pastTenants: demoPastTenants
+    });
+
+    alert("🎉 Mock Demo Data Loaded Successfully!\n\nYou now have active properties, agreements, partial payments, and overdue timelines to fully test all features.");
+    window.location.reload();
+  };
+
+  // ─── Mobile Detection ─────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
   }, []);
 
-  if (loading) {
+  // ─── House Setup Gate ─────────────────────────────────────────────────────
+  if (showHouseSetup || !houseCode) {
     return (
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        width: '100vw',
-        background: 'radial-gradient(circle at top right, #3d6a54, #1a2c22, #0d1510)',
-        color: '#ffffff',
-        fontFamily: 'Outfit, sans-serif'
-      }}>
-        <div className="loader-spinner" style={{
-          width: '50px',
-          height: '50px',
-          borderRadius: '50%',
-          border: '3px solid rgba(255, 255, 255, 0.1)',
-          borderTopColor: '#d4a373',
-          animation: 'spin 1s linear infinite',
-          marginBottom: '16px'
-        }} />
-        <h3 style={{ fontWeight: '500', fontSize: '1.2rem', letterSpacing: '0.5px' }}>RentEase Dossiers</h3>
-        <p style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginTop: '4px' }}>Loading secure local storage...</p>
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  if (isMobile) {
-    return (
-      <MobileApp 
-        properties={properties}
-        setProperties={setProperties}
-        tenants={tenants}
-        setTenants={setTenants}
-        ledger={ledger}
-        setLedger={setLedger}
-        pastTenants={pastTenants}
-        setPastTenants={setPastTenants}
-        notifications={notifications}
-        addProperty={addProperty}
-        editProperty={editProperty}
-        deleteProperty={deleteProperty}
-        addTenant={addTenant}
-        removeTenant={removeTenant}
-        scheduleRentRaise={scheduleRentRaise}
-        updatePaymentStatus={updatePaymentStatus}
-        updateTenantNotes={updateTenantNotes}
-        handleExportData={handleExportData}
+      <HouseCodeScreen
+        onComplete={(code) => {
+          localStorage.setItem('rentarc_house_code', code.toUpperCase().trim());
+          window.location.reload();
+        }}
       />
     );
   }
 
+  // ─── Loading Screen ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', width: '100vw', background: 'radial-gradient(circle at top right, #3d6a54, #1a2c22, #0d1510)', color: '#ffffff', fontFamily: 'Outfit, sans-serif' }}>
+        <div className="loader-spinner" style={{ width: '50px', height: '50px', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#d4a373', animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
+        <h3 style={{ fontWeight: '500', fontSize: '1.2rem', letterSpacing: '0.5px' }}>RentArc Dossiers</h3>
+        <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', marginTop: '4px' }}>Connecting to your house data...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // ─── Mobile Layout ────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <MobileApp
+        properties={properties}       setProperties={setProperties}
+        tenants={tenants}             setTenants={setTenants}
+        ledger={ledger}               setLedger={setLedger}
+        pastTenants={pastTenants}     setPastTenants={setPastTenants}
+        notifications={notifications}
+        addProperty={addProperty}     editProperty={editProperty}   deleteProperty={deleteProperty}
+        addTenant={addTenant}         removeTenant={removeTenant}
+        scheduleRentRaise={scheduleRentRaise}
+        updatePaymentStatus={updatePaymentStatus}
+        updateTenantNotes={updateTenantNotes}
+        handleExportData={handleExportData}
+        requestNotificationPermission={requestNotificationPermission}
+        loadDemoData={loadDemoData}
+      />
+    );
+  }
+
+  // ─── Sync Status Badge ────────────────────────────────────────────────────
+  const SyncBadge = () => (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.7rem', fontWeight: '600', color: syncStatus === 'live' ? '#4ade80' : syncStatus === 'offline' ? '#f97316' : '#a1a1aa', padding: '3px 10px', borderRadius: '20px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${syncStatus === 'live' ? 'rgba(74,222,128,0.25)' : syncStatus === 'offline' ? 'rgba(249,115,22,0.25)' : 'rgba(161,161,170,0.2)'}` }}>
+      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: syncStatus === 'live' ? '#4ade80' : syncStatus === 'offline' ? '#f97316' : '#a1a1aa', boxShadow: syncStatus === 'live' ? '0 0 6px #4ade80' : 'none', animation: syncStatus === 'live' ? 'syncPulse 2s infinite' : 'none' }} />
+      {syncStatus === 'live' ? '🔴 Live' : syncStatus === 'offline' ? 'Offline' : 'Connecting...'}
+    </div>
+  );
+
+  // ─── Desktop Layout ───────────────────────────────────────────────────────
   return (
     <div id="app-root" className="app-layout">
-      {/* DESKTOP SIDEBAR NAVIGATION */}
+
+      {/* DESKTOP SIDEBAR */}
       <aside className="sidebar">
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <a href="#" className="app-logo" onClick={() => setCurrentTab('ledger')}>
-              🏠 Rent<span className="app-logo-span">Ease</span>
+              🏠 Rent<span className="app-logo-span">Arc</span>
             </a>
-            <button 
-              className="notification-bell-btn" 
-              onClick={() => setShowNotifications(true)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                position: 'relative',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '6px',
-                color: 'var(--text-main)',
-                transition: 'var(--transition-normal)',
-                borderRadius: '50%'
-              }}
-              title="Open Alerts Center"
-            >
+            <button className="notification-bell-btn" onClick={async () => {
+              await requestNotificationPermission();
+              setShowNotifications(true);
+            }} style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', color: 'var(--text-main)', transition: 'var(--transition-normal)', borderRadius: '50%' }} title="Open Alerts Center">
               <Bell size={22} />
               {notifications.length > 0 && (
-                <span className="bell-badge-pulse" style={{
-                  position: 'absolute',
-                  top: '2px',
-                  right: '2px',
-                  width: '9px',
-                  height: '9px',
-                  backgroundColor: 'var(--color-secondary)',
-                  borderRadius: '50%'
-                }} />
+                <span className="bell-badge-pulse" style={{ position: 'absolute', top: '2px', right: '2px', width: '9px', height: '9px', backgroundColor: 'var(--color-secondary)', borderRadius: '50%' }} />
               )}
             </button>
           </div>
-          
-          <nav className="nav-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '32px' }}>
 
-            <button 
-              className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('properties')}
-            >
-              🏠 Properties
-            </button>
-            <button 
-              className={`nav-link ${currentTab === 'tenants' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('tenants')}
-            >
-              👥 Agreements
-            </button>
-            <button 
-              className={`nav-link ${currentTab === 'ledger' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('ledger')}
-            >
-              📅 Rents
-            </button>
-            <button 
-              className={`nav-link ${currentTab === 'history' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('history')}
-            >
-              📖 History Logs
-            </button>
-            <button 
-              className={`nav-link ${currentTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setCurrentTab('settings')}
-            >
-              ⚙️ Settings
-            </button>
+          {/* Sync badge */}
+          <div style={{ marginTop: '10px' }}><SyncBadge /></div>
+
+          <nav className="nav-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '24px' }}>
+            <button className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`} onClick={() => setCurrentTab('properties')}>🏠 Properties</button>
+            <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}>👥 Agreements</button>
+            <button className={`nav-link ${currentTab === 'ledger'     ? 'active' : ''}`} onClick={() => setCurrentTab('ledger')}>📅 Rents</button>
+            <button className={`nav-link ${currentTab === 'history'    ? 'active' : ''}`} onClick={() => setCurrentTab('history')}>📖 History Logs</button>
+            <button className={`nav-link ${currentTab === 'settings'   ? 'active' : ''}`} onClick={() => setCurrentTab('settings')}>⚙️ Settings</button>
           </nav>
         </div>
 
-        {/* Sidebar Footer Badge */}
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-          🔒 Private Local Ledger
-          <div style={{ fontSize: '0.75rem', marginTop: '2px' }}>All data saved offline in browser</div>
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+            🏠 House: <span style={{ fontFamily: 'monospace', fontWeight: '700', color: 'var(--text-main)' }}>{houseCode}</span>
+          </div>
+          <button
+            onClick={() => {
+              if (window.confirm('Sign out of this house?\n\nYou can re-enter the house code anytime to get back in.')) {
+                localStorage.removeItem('rentarc_house_code');
+                window.location.reload();
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              background: 'rgba(239, 68, 68, 0.08)',
+              color: '#ef4444',
+              fontFamily: 'Outfit, sans-serif',
+              fontSize: '0.82rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '7px',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; }}
+          >
+            🚪 Sign Out
+          </button>
         </div>
       </aside>
 
-      {/* MOBILE TOP HEADER BAR (Only visible on mobile viewport) */}
+      {/* MOBILE TOP HEADER */}
       <header className="main-header">
         <div className="header-content" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <a href="#" className="app-logo" onClick={() => setCurrentTab('ledger')}>
-            🏠 Rent<span className="app-logo-span">Ease</span>
+            🏠 Rent<span className="app-logo-span">Arc</span>
           </a>
-          <button 
-            className="notification-bell-btn" 
-            onClick={() => setShowNotifications(true)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '6px',
-              color: 'var(--text-main)'
-            }}
-            title="Open Alerts Center"
-          >
+          <button className="notification-bell-btn" onClick={async () => {
+            await requestNotificationPermission();
+            setShowNotifications(true);
+          }} style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px', color: 'var(--text-main)' }} title="Open Alerts Center">
             <Bell size={22} />
             {notifications.length > 0 && (
-              <span className="bell-badge-pulse" style={{
-                position: 'absolute',
-                top: '2px',
-                right: '2px',
-                width: '9px',
-                height: '9px',
-                backgroundColor: 'var(--color-secondary)',
-                borderRadius: '50%'
-              }} />
+              <span className="bell-badge-pulse" style={{ position: 'absolute', top: '2px', right: '2px', width: '9px', height: '9px', backgroundColor: 'var(--color-secondary)', borderRadius: '50%' }} />
             )}
           </button>
         </div>
       </header>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {/* MOBILE BOTTOM NAV */}
       <div className="nav-container nav-mobile-bar" style={{ display: 'none' }}>
-
-        <button 
-          className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('properties')}
-        >
-          <Home size={20} />
-          Properties
-        </button>
-        <button 
-          className={`nav-link ${currentTab === 'tenants' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('tenants')}
-        >
-          <Users size={20} />
-          Agreements
-        </button>
-        <button 
-          className={`nav-link ${currentTab === 'ledger' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('ledger')}
-        >
-          <DollarSign size={20} />
-          Rents
-        </button>
-        <button 
-          className={`nav-link ${currentTab === 'history' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('history')}
-        >
-          <History size={20} />
-          Logs
-        </button>
-        <button 
-          className={`nav-link ${currentTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('settings')}
-        >
-          <Settings size={20} />
-          Settings
-        </button>
+        <button className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`} onClick={() => setCurrentTab('properties')}><Home size={20} />Properties</button>
+        <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}><Users size={20} />Agreements</button>
+        <button className={`nav-link ${currentTab === 'ledger'     ? 'active' : ''}`} onClick={() => setCurrentTab('ledger')}><DollarSign size={20} />Rents</button>
+        <button className={`nav-link ${currentTab === 'history'    ? 'active' : ''}`} onClick={() => setCurrentTab('history')}><History size={20} />Logs</button>
+        <button className={`nav-link ${currentTab === 'settings'   ? 'active' : ''}`} onClick={() => setCurrentTab('settings')}><Settings size={20} />Settings</button>
       </div>
 
-      {/* RIGHT SIDE / MAIN SCROLLABLE CONTENT */}
+      {/* MAIN CONTENT */}
       <div className="main-content">
         <main className="app-container" style={{ maxWidth: '100%', padding: 0 }}>
-          
-
 
           {currentTab === 'properties' && (
-            <PropertyManager 
-              properties={properties}
-              tenants={tenants}
-              addProperty={addProperty}
-              editProperty={editProperty}
-              deleteProperty={deleteProperty}
-            />
+            <PropertyManager properties={properties} tenants={tenants} addProperty={addProperty} editProperty={editProperty} deleteProperty={deleteProperty} />
           )}
-
           {currentTab === 'tenants' && (
-            <TenantManager 
-              tenants={tenants}
-              properties={properties}
-              addTenant={addTenant}
-              removeTenant={removeTenant}
-              updateTenantRent={scheduleRentRaise}
-            />
+            <TenantManager tenants={tenants} properties={properties} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} />
           )}
-
           {currentTab === 'ledger' && (
-            <RentLedger 
-              tenants={tenants}
-              properties={properties}
-              ledger={ledger}
-              updatePaymentStatus={updatePaymentStatus}
-              updateTenantNotes={updateTenantNotes}
-            />
+            <RentLedger tenants={tenants} properties={properties} ledger={ledger} updatePaymentStatus={updatePaymentStatus} updateTenantNotes={updateTenantNotes} />
           )}
-
           {currentTab === 'history' && (
-            <TenancyHistory 
-              properties={properties}
-              tenants={tenants}
-              pastTenants={pastTenants}
-              ledger={ledger}
-            />
+            <TenancyHistory properties={properties} tenants={tenants} pastTenants={pastTenants} ledger={ledger} />
           )}
-
           {currentTab === 'settings' && (
             <div className="settings-box">
               <h2 style={{ fontSize: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
                 ⚙️ Settings & Data Backups
               </h2>
 
+              {/* House Code Info */}
+              <div className="settings-group">
+                <h3 className="settings-title">🏠 Your House Code</h3>
+                <p className="settings-description">
+                  Your current house code is{' '}
+                  <strong style={{ fontFamily: 'monospace', background: 'var(--bg-app)', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    {houseCode}
+                  </strong>.
+                  {' '}Share this code with trusted family members — they enter it on their devices to sync the same live data.
+                </p>
+                <button className="btn btn-secondary" onClick={() => {
+                  if (window.confirm('Sign out of this house? You can re-enter the code anytime.')) {
+                    localStorage.removeItem('rentarc_house_code');
+                    window.location.reload();
+                  }
+                }}>
+                  🔄 Change House Code
+                </button>
+              </div>
+
+              {/* Load Mock Demo Data */}
+              <div className="settings-group">
+                <h3 className="settings-title" style={{ color: 'var(--color-secondary)' }}>
+                  🛠️ Developer / Mock Demo Testing Data
+                </h3>
+                <p className="settings-description">
+                  Populate your current house code with mock properties, active agreements, partial payment records, and overdue timelines to test system notifications, visual auto-scrolls, and PDF reporting. Any existing data under this house code will be overwritten.
+                </p>
+                <button className="btn" onClick={loadDemoData} style={{ background: 'var(--color-secondary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Outfit, sans-serif' }}>
+                  🛠️ Click to Load Demo Testing Data
+                </button>
+              </div>
+
+              {/* Backup */}
               <div className="settings-group" style={{ borderBottom: 'none', paddingBottom: 0 }}>
                 <h3 className="settings-title">
                   <Download size={18} style={{ color: 'var(--color-secondary)' }} />
                   Save My Data (Download Backup File)
                 </h3>
                 <p className="settings-description">
-                  Your data is stored securely and privately in this local browser. To save a safe physical backup copy of your properties, tenants, and monthly payment records directly on your computer, click the download button below:
+                  To save a safe physical backup copy of your properties, tenants, and monthly payment records directly on your computer, click the download button below:
                 </p>
                 <button className="btn btn-primary" onClick={handleExportData}>
                   💾 Click to Save Data
@@ -698,7 +1039,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* DETAILED NOTIFICATIONS OVERLAY MODAL */}
+      {/* NOTIFICATIONS MODAL */}
       {showNotifications && (
         <div className="modal-overlay" style={{ zIndex: 2000 }}>
           <div className="modal-content" style={{ maxWidth: '440px', borderRadius: 'var(--radius-lg)' }}>
@@ -706,14 +1047,11 @@ export default function App() {
               <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 🔔 Notifications Center
               </h3>
-              <button 
-                onClick={() => setShowNotifications(false)} 
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
-              >
+              <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}>
                 <X size={20} />
               </button>
             </div>
-            
+
             {notifications.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
                 <CheckCircle size={36} style={{ color: 'var(--color-primary)', marginBottom: '10px', display: 'inline-block' }} />
@@ -722,46 +1060,33 @@ export default function App() {
               </div>
             ) : (
               <div className="notification-list-scrollable" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '55vh', overflowY: 'auto', paddingRight: '4px' }}>
-                {notifications.map(n => (
-                  <div key={n.id} style={{
-                    padding: '12px',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid var(--border-color)',
-                    backgroundColor: 'var(--bg-app)',
-                    borderLeft: `4px solid ${n.type === 'repair' ? 'var(--color-warning)' : n.type === 'due' ? 'var(--color-danger)' : 'var(--color-primary)'}`,
-                    display: 'flex',
-                    gap: '10px',
-                    alignItems: 'flex-start'
-                  }}>
+                {notifications.map((n) => (
+                  <div key={n.id} style={{ padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', borderLeft: `4px solid ${n.type === 'repair' ? 'var(--color-warning)' : n.type === 'due' ? 'var(--color-danger)' : 'var(--color-primary)'}`, display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                     <div style={{ marginTop: '2px' }}>
-                      {n.type === 'repair' ? (
-                        <AlertTriangle size={16} style={{ color: 'var(--color-warning)' }} />
-                      ) : n.type === 'due' ? (
-                        <AlertTriangle size={16} style={{ color: 'var(--color-danger)' }} />
-                      ) : (
-                        <Info size={16} style={{ color: 'var(--color-primary)' }} />
-                      )}
+                      {n.type === 'repair' || n.type === 'due'
+                        ? <AlertTriangle size={16} style={{ color: n.type === 'repair' ? 'var(--color-warning)' : 'var(--color-danger)' }} />
+                        : <Info size={16} style={{ color: 'var(--color-primary)' }} />}
                     </div>
                     <div style={{ flexGrow: 1 }}>
                       <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--text-main)' }}>{n.title}</div>
                       <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: '1.4' }}>{n.message}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' }}>📅 Date: {n.date}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-            
-            <button 
-              className="btn btn-secondary" 
-              onClick={() => setShowNotifications(false)}
-              style={{ width: '100%', marginTop: '20px' }}
-            >
+
+            <button className="btn btn-secondary" onClick={() => setShowNotifications(false)} style={{ width: '100%', marginTop: '20px' }}>
               Close
             </button>
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes syncPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+      `}</style>
     </div>
   );
 }

@@ -11,6 +11,18 @@ import {
   Info
 } from 'lucide-react';
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function MobileTenancyHistory({
   properties,
   tenants,
@@ -87,8 +99,8 @@ export default function MobileTenancyHistory({
           <tr style="border-bottom:1px solid #e8e4dd;">
             <td style="padding:10px 8px;font-weight:700;">${t.name}</td>
             <td style="padding:10px 8px;color:#555;">${t.phone}</td>
-            <td style="padding:10px 8px;">${t.moveInDate}</td>
-            <td style="padding:10px 8px;font-weight:600;">${t.moveOutDate}</td>
+            <td style="padding:10px 8px;">${formatDateToDDMMYYYY(t.moveInDate)}</td>
+            <td style="padding:10px 8px;font-weight:600;">${formatDateToDDMMYYYY(t.moveOutDate)}</td>
             <td style="padding:10px 8px;text-align:right;font-weight:800;color:#3d6a54;">₹${Number(t.totalRentCollected).toLocaleString('en-IN')}</td>
           </tr>`).join('');
 
@@ -137,7 +149,7 @@ export default function MobileTenancyHistory({
         <div class="section-title">✅ Current Active Tenant</div>
         <table><thead><tr><th>Tenant Name</th><th>Phone</th><th>Move-In</th><th>Security Deposit</th><th style="text-align:right;">Monthly Rent</th></tr></thead>
         <tbody><tr style="border-bottom:1px solid #e8e4dd;">
-          <td style="font-weight:700;">${activeTenant.name}</td><td>${activeTenant.phone}</td><td>${activeTenant.moveInDate}</td>
+          <td style="font-weight:700;">${activeTenant.name}</td><td>${activeTenant.phone}</td><td>${formatDateToDDMMYYYY(activeTenant.moveInDate)}</td>
           <td>₹${Number(activeTenant.securityDeposit).toLocaleString('en-IN')}</td>
           <td style="text-align:right;font-weight:800;color:#3d6a54;">₹${Number(activeTenant.rent).toLocaleString('en-IN')}/mo</td>
         </tr></tbody></table>` : ''}
@@ -288,7 +300,7 @@ export default function MobileTenancyHistory({
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--mobile-muted)', marginTop: '2px' }}>
                             <div>📞 Contact: <strong>{past.phone}</strong></div>
-                            <div>📅 Tenure: <strong>{past.moveInDate}</strong> to <strong>{past.moveOutDate}</strong></div>
+                            <div>📅 Tenure: <strong>{formatDateToDDMMYYYY(past.moveInDate)}</strong> to <strong>{formatDateToDDMMYYYY(past.moveOutDate)}</strong></div>
                           </div>
                         </div>
                       ))}
@@ -299,34 +311,6 @@ export default function MobileTenancyHistory({
               </div>
             );
           })()}
-
-          {/* Database Admin Offline Controls */}
-          <div style={{
-            backgroundColor: 'var(--mobile-card-bg)',
-            border: '1px solid var(--mobile-border)',
-            borderRadius: 'var(--mobile-radius)',
-            padding: '16px',
-            boxShadow: 'var(--mobile-shadow)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            marginTop: '8px'
-          }}>
-            <h4 style={{ fontSize: '0.9rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Database size={16} style={{ color: 'var(--mobile-secondary)' }} />
-              Database Backups
-            </h4>
-            <p style={{ fontSize: '0.74rem', color: 'var(--mobile-muted)', lineHeight: '1.4' }}>
-              All database items are stored privately inside your local offline browser. Download a safe copy to your device:
-            </p>
-            <button 
-              className="mobile-btn mobile-btn-primary" 
-              onClick={handleExportData}
-              style={{ width: '100%', gap: '6px', height: '42px' }}
-            >
-              <Download size={16} /> Save Data Backup File
-            </button>
-          </div>
         </>
       )}
 

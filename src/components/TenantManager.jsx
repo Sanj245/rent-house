@@ -2,6 +2,18 @@ import React, { useState } from 'react';
 import { Users, Plus, Phone, Calendar, FileText, Upload, Edit3, X, ArrowUpRight, CreditCard, Shield, Image as ImageIcon } from 'lucide-react';
 import PdfInlinePreview from './PdfInlinePreview';
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function TenantManager({ 
   tenants, 
   properties, 
@@ -344,7 +356,7 @@ export default function TenantManager({
                     </div>
                     <div className="detail-row">
                       <span className="label">📅 Move-in Date</span>
-                      <span className="value" style={{ fontWeight: '700' }}>{tenant.moveInDate}</span>
+                      <span className="value" style={{ fontWeight: '700' }}>{formatDateToDDMMYYYY(tenant.moveInDate)}</span>
                     </div>
                   </div>
 
@@ -509,11 +521,11 @@ export default function TenantManager({
                     
                     {tenant.raiseApplied ? (
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                        Rent raised by <strong>{tenant.scheduledRaisePercent}%</strong> on <strong>{tenant.scheduledRaiseEffectiveDate}</strong>.
+                        Rent raised by <strong>{tenant.scheduledRaisePercent}%</strong> on <strong>{formatDateToDDMMYYYY(tenant.scheduledRaiseEffectiveDate)}</strong>.
                       </div>
                     ) : (
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '8px' }}>
-                        Automatic <strong>{tenant.scheduledRaisePercent}%</strong> Rent Increase set for <strong>{tenant.scheduledRaiseEffectiveDate}</strong>.
+                        Automatic <strong>{tenant.scheduledRaisePercent}%</strong> Rent Increase set for <strong>{formatDateToDDMMYYYY(tenant.scheduledRaiseEffectiveDate)}</strong>.
                         <br />
                         Rent will raise to <strong>₹{getRaisePreview(tenant.rent, tenant.scheduledRaisePercent).newRent}</strong>.
                       </div>

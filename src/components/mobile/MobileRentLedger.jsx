@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   DollarSign, 
   X, 
@@ -32,12 +32,31 @@ export default function MobileRentLedger({
     { name: 'December',  key: 'Dec', index: 12 },
   ];
 
-  const yearsList = [2026, 2027, 2028];
+  const yearsList = [2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028];
 
   const today = new Date();
   const currentMonthKey = monthsBase[today.getMonth()].key;
   const currentYear = today.getFullYear();
   const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${currentMonthKey}-${currentYear}`);
+
+  const activeMonthRef = useRef(null);
+  useEffect(() => {
+    if (activeMonthRef.current) {
+      activeMonthRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, []);
+
+  const formatDateToDDMMYYYY = (dateStr) => {
+    if (!dateStr || dateStr === '—') return '—';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      return dateStr;
+    }
+    return dateStr;
+  };
 
   // Edit payment sheet
   const [editPaymentNode, setEditPaymentNode] = useState(null);
@@ -79,14 +98,14 @@ export default function MobileRentLedger({
     if (payData && typeof payData === 'object' && payData.rentDue !== undefined) return payData.rentDue;
 
     const monthIndex = monthsBase.find(m => m.key === monthKey)?.index || 12;
-    const selectedAbsoluteIndex = (year - 2026) * 12 + monthIndex;
+    const selectedAbsoluteIndex = (year - 2020) * 12 + monthIndex;
 
     if (tenant.scheduledRaiseEffectiveDate) {
       const parts = tenant.scheduledRaiseEffectiveDate.split('-');
       if (parts.length >= 2) {
         const raiseYear  = parseInt(parts[0], 10);
         const raiseMonth = parseInt(parts[1], 10);
-        const raiseAbsoluteIndex = (raiseYear - 2026) * 12 + raiseMonth;
+        const raiseAbsoluteIndex = (raiseYear - 2020) * 12 + raiseMonth;
         const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
         if (selectedAbsoluteIndex < raiseAbsoluteIndex) return baseRent;
         const raisePercent = Number(tenant.scheduledRaisePercent || 10);
@@ -102,12 +121,30 @@ export default function MobileRentLedger({
     if (parts.length < 2) return true;
     const moveInYear  = parseInt(parts[0], 10);
     const moveInMonth = parseInt(parts[1], 10);
-    const moveInAbsoluteIndex = (moveInYear - 2026) * 12 + moveInMonth;
+    const moveInAbsoluteIndex = (moveInYear - 2020) * 12 + moveInMonth;
     const [monthKey, yearStr] = timelineKey.split('-');
     const year = parseInt(yearStr, 10);
     const monthIndex = monthsBase.find(m => m.key === monthKey)?.index || 1;
-    const selectedAbsoluteIndex = (year - 2026) * 12 + monthIndex;
+    const selectedAbsoluteIndex = (year - 2020) * 12 + monthIndex;
     return selectedAbsoluteIndex >= moveInAbsoluteIndex;
+  };
+
+  const getDueDateOfTimelineKey = (timelineKey) => {
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIndex = monthsBase.find(m => m.key === monthKey)?.index;
+    if (!monthIndex) return null;
+    return new Date(year, monthIndex, 10);
+  };
+
+  const getFormattedDueDate = (timelineKey) => {
+    const [monthKey, yearStr] = timelineKey.split('-');
+    const year = parseInt(yearStr, 10);
+    const monthIndex = monthsBase.find(m => m.key === monthKey)?.index;
+    if (!monthIndex) return '';
+    const nextMonthName = monthsBase[monthIndex % 12].name;
+    const nextYear = monthIndex === 12 ? year + 1 : year;
+    return `10th ${nextMonthName} ${nextYear}`;
   };
 
   const handleMarkPaid = (tenant, timelineKey) => {
@@ -189,6 +226,43 @@ export default function MobileRentLedger({
   const [selMonth, selYear] = selectedTimelineKey.split('-');
   const displayMonthName = `${monthsBase.find(m => m.key === selMonth)?.name} ${selYear}`;
 
+  const getActiveRaisesForSelectedMonth = () => {
+    const activeList = [];
+    const [selectedMonthKey, selectedYearStr] = selectedTimelineKey.split('-');
+    const selectedYear = parseInt(selectedYearStr, 10);
+    
+    tenants.forEach(t => {
+      if (t.scheduledRaiseEffectiveDate) {
+        const parts = t.scheduledRaiseEffectiveDate.split('-');
+        if (parts.length >= 2) {
+          const raiseYear = parseInt(parts[0], 10);
+          const raiseMonth = parseInt(parts[1], 10);
+          
+          // Rent collection month for this raise is the next month
+          let collectMonthIndex = raiseMonth;
+          let collectYear = raiseYear;
+          const collectMonthKey = monthsBase.find(m => m.index === collectMonthIndex)?.key || '';
+          
+          if (selectedMonthKey === collectMonthKey && selectedYear === collectYear) {
+            const baseRent = t.rentHistory && t.rentHistory[0] ? Number(t.rentHistory[0].amount) : Number(t.rent);
+            const raisedRent = getRentForMonth(t, selectedTimelineKey);
+            activeList.push({
+              tenantName: t.name,
+              propertyName: getPropertyName(t.propertyId),
+              percent: t.scheduledRaisePercent,
+              oldRent: baseRent,
+              newRent: raisedRent,
+              effectiveDate: t.scheduledRaiseEffectiveDate
+            });
+          }
+        }
+      }
+    });
+    return activeList;
+  };
+
+  const activeRaises = getActiveRaisesForSelectedMonth();
+
   // Derive status info for a tenant in selected month
   const getTenantMonthInfo = (tenant) => {
     const tenantPayments = ledger[tenant.id] || {};
@@ -196,6 +270,8 @@ export default function MobileRentLedger({
     const payData = getPaymentData(tenantPayments, mKey, parseInt(yStr, 10));
     const computedRent = getRentForMonth(tenant, selectedTimelineKey);
     const isAvailable = isMonthAvailable(tenant.moveInDate, selectedTimelineKey);
+    const dueDate = getDueDateOfTimelineKey(selectedTimelineKey);
+    const isOverdue = dueDate && new Date() >= dueDate;
 
     let statusText  = 'Pending Due';
     let amountStr   = `₹${computedRent}`;
@@ -229,6 +305,20 @@ export default function MobileRentLedger({
         receiverStr = payData.receivedBy   || '—';
         notesStr    = payData.notes         || '—';
       }
+    } else {
+      if (isOverdue) {
+        statusText  = 'Pending Due';
+        statusColor = '#e05c3a';
+        statusBg    = 'rgba(224,92,58,0.09)';
+        statusEmoji = '🔴';
+        amountStr   = `₹${computedRent} (Due)`;
+      } else {
+        statusText  = 'Pending Due';
+        statusColor = '#4682b4';
+        statusBg    = 'rgba(70,130,180,0.1)';
+        statusEmoji = '⏳';
+        amountStr   = `₹${computedRent} (Due)`;
+      }
     }
 
     return { computedRent, isAvailable, payData, statusText, amountStr, dateStr, methodStr, receiverStr, notesStr, statusColor, statusBg, statusEmoji };
@@ -259,7 +349,7 @@ export default function MobileRentLedger({
                 const tKey = `${m.key}-${year}`;
                 const isActive = tKey === selectedTimelineKey;
                 return (
-                  <button key={tKey} onClick={() => setSelectedTimelineKey(tKey)} style={{
+                  <button key={tKey} ref={isActive ? activeMonthRef : null} onClick={() => setSelectedTimelineKey(tKey)} style={{
                     fontWeight: '700', fontSize: '0.7rem', padding: '5px 11px', borderRadius: '7px',
                     border: `1px solid ${isActive ? 'var(--mobile-secondary)' : 'var(--mobile-border)'}`,
                     cursor: 'pointer',
@@ -288,6 +378,61 @@ export default function MobileRentLedger({
           — {tenants.length} tenant{tenants.length !== 1 ? 's' : ''}
         </span>
       </div>
+
+      {/* Active Rent Increase Banners */}
+      {activeRaises.map((raise, idx) => (
+        <div key={idx} style={{
+          backgroundColor: 'rgba(61, 106, 84, 0.04)',
+          border: '1px solid var(--mobile-primary)',
+          borderLeft: '4px solid var(--mobile-primary)',
+          borderRadius: '14px',
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          boxShadow: 'var(--mobile-shadow)',
+          marginBottom: '4px'
+        }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+            <TrendingUp size={16} style={{ color: 'var(--mobile-primary)', marginTop: '2px', flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: '800', fontSize: '0.82rem', color: 'var(--mobile-text)' }}>
+                📈 Rent Increase Active ({displayMonthName})
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--mobile-muted)', marginTop: '3px', lineHeight: '1.4' }}>
+                Rent raised by <strong>{raise.percent}%</strong> for <strong>{raise.tenantName}</strong> at <strong>{raise.propertyName}</strong> starting {raise.effectiveDate}.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            backgroundColor: '#ffffff', 
+            padding: '6px 12px', 
+            borderRadius: '10px', 
+            border: '1px solid var(--mobile-border)'
+          }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--mobile-muted)', textDecoration: 'line-through' }}>
+              ₹{raise.oldRent}
+            </span>
+            <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--mobile-primary)' }}>
+              ➡️ ₹{raise.newRent}
+            </span>
+            <span style={{ 
+              fontSize: '0.62rem', 
+              backgroundColor: 'rgba(61, 106, 84, 0.08)', 
+              color: 'var(--mobile-primary)', 
+              padding: '2px 6px', 
+              borderRadius: '4px',
+              fontWeight: '800'
+            }}>
+              +{raise.percent}%
+            </span>
+          </div>
+        </div>
+      ))}
 
       {/* Empty state */}
       {tenants.length === 0 ? (
@@ -364,7 +509,7 @@ export default function MobileRentLedger({
                       📅 Payment Date
                     </div>
                     <div style={{ fontSize: '0.83rem', fontWeight: '600', color: 'var(--mobile-text)' }}>
-                      {dateStr}
+                      {formatDateToDDMMYYYY(dateStr)}
                     </div>
                   </div>
 
@@ -403,7 +548,7 @@ export default function MobileRentLedger({
                 {/* Action buttons */}
                 {isAvailable && (
                   <div style={{ padding: '0 14px 12px', display: 'flex', gap: '8px' }}>
-                    {(statusText === 'Pending Due' || statusText === 'Unmarked' || statusText === 'Unpaid') && (
+                    {(statusText === 'Pending Due' || statusText === 'Unmarked' || statusText === 'Unpaid' || statusText === 'Overdue' || statusText === 'Awaiting Due') && (
                       <button
                         onClick={() => handleMarkPaid(tenant, selectedTimelineKey)}
                         style={{

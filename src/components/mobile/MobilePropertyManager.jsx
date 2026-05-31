@@ -12,6 +12,44 @@ import {
   DollarSign
 } from 'lucide-react';
 
+const compressImage = (file, maxWidth, maxHeight, quality) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
 export default function MobilePropertyManager({
   properties,
   tenants,
@@ -107,7 +145,7 @@ export default function MobilePropertyManager({
     setApplianceFile(file);
   };
 
-  const handleAttachApplianceImage = () => {
+  const handleAttachApplianceImage = async () => {
     if (!applianceName.trim()) {
       alert('Please enter an Appliance Name.');
       return;
@@ -118,13 +156,23 @@ export default function MobilePropertyManager({
     }
 
     setUploadingState(true);
-    const reader = new FileReader();
-    reader.readAsDataURL(applianceFile);
-    reader.onload = () => {
+    try {
+      let fileData = '';
+      if (applianceFile.type.startsWith('image/')) {
+        fileData = await compressImage(applianceFile, 800, 800, 0.7);
+      } else {
+        const reader = new FileReader();
+        fileData = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(applianceFile);
+        });
+      }
+
       const newImage = {
         id: `img-${Date.now()}`,
         name: applianceName.trim(),
-        data: reader.result
+        data: fileData
       };
 
       setImages(prev => [...prev, newImage]);
@@ -134,7 +182,11 @@ export default function MobilePropertyManager({
       
       const fileInput = document.getElementById('mobile-appliance-image-input');
       if (fileInput) fileInput.value = '';
-    };
+    } catch (err) {
+      console.error('Image compression error:', err);
+      alert('⚠️ Failed to upload and compress image.');
+      setUploadingState(false);
+    }
   };
 
   const handleRemoveImage = (imgId) => {

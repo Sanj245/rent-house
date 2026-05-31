@@ -1,50 +1,89 @@
-const DB_NAME = 'RentEaseDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'keyval';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
 
-export function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onsuccess = (e) => resolve(e.target.result);
-    request.onerror = (e) => reject(e.target.error);
+const COLLECTION = 'houses';
+
+/**
+ * Subscribe to real-time updates for a house.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToHouse(houseCode, callback) {
+  const ref = doc(db, COLLECTION, houseCode.toUpperCase().trim());
+  return onSnapshot(
+    ref,
+    { includeMetadataChanges: true },
+    (snap) => {
+      callback({
+        exists: snap.exists(),
+        data: snap.exists() ? snap.data() : null,
+        fromCache: snap.metadata.fromCache,
+        error: null,
+      });
+    },
+    (err) => {
+      console.error('Firestore listener error:', err);
+      callback({ exists: false, data: null, fromCache: true, error: err });
+    }
+  );
+}
+
+/**
+ * Write (overwrite) the full house document.
+ */
+export async function saveHouseData(houseCode, data) {
+  const ref = doc(db, COLLECTION, houseCode.toUpperCase().trim());
+  await setDoc(ref, {
+    properties:  data.properties  || [],
+    tenants:     data.tenants     || [],
+    ledger:      data.ledger      || {},
+    pastTenants: data.pastTenants || [],
   });
 }
 
-export async function getValue(key, defaultValue) {
-  try {
-    const db = await openDB();
-    return new Promise((resolve) => {
-      const transaction = db.transaction(STORE_NAME, 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(key);
-      request.onsuccess = () => {
-        resolve(request.result !== undefined ? request.result : defaultValue);
-      };
-      request.onerror = () => resolve(defaultValue);
-    });
-  } catch (err) {
-    console.error('IndexedDB getValue error:', err);
-    return defaultValue;
-  }
+/**
+ * Check if a house code already exists in Firestore.
+ */
+export async function houseExists(houseCode) {
+  const ref = doc(db, COLLECTION, houseCode.toUpperCase().trim());
+  const snap = await getDoc(ref);
+  return snap.exists();
 }
 
-export async function setValue(key, value) {
-  try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction(STORE_NAME, 'readwrite');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.put(value, key);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  } catch (err) {
-    console.error('IndexedDB setValue error:', err);
-  }
+/**
+ * Read any legacy data from localStorage (old IndexedDB keys).
+ * Returns null if nothing found.
+ */
+export function readLegacyLocalData() {
+  const find = (keys) => {
+    for (const k of keys) {
+      const val = localStorage.getItem(k);
+      if (val) return JSON.parse(val);
+    }
+    return null;
+  };
+
+  const properties  = find(['rentarc_properties',  'rentease_properties']);
+  const tenants     = find(['rentarc_tenants',      'rentease_tenants']);
+  const ledger      = find(['rentarc_ledger',       'rentease_ledger']);
+  const pastTenants = find(['rentarc_past_tenants', 'rentease_past_tenants']);
+
+  if (!properties && !tenants) return null;
+
+  return {
+    properties:  properties  || [],
+    tenants:     tenants     || [],
+    ledger:      ledger      || {},
+    pastTenants: pastTenants || [],
+  };
+}
+
+/**
+ * Remove all legacy localStorage keys after migration.
+ */
+export function clearLegacyLocalData() {
+  const keys = [
+    'rentarc_properties', 'rentarc_tenants', 'rentarc_ledger', 'rentarc_past_tenants',
+    'rentease_properties', 'rentease_tenants', 'rentease_ledger', 'rentease_past_tenants',
+  ];
+  keys.forEach((k) => localStorage.removeItem(k));
 }

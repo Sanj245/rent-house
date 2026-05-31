@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
 import { Home, Plus, Edit3, Trash2, AlertTriangle, X, FileText, User, Camera, Eye } from 'lucide-react';
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function PropertyManager({ 
   properties, 
   tenants,
@@ -239,7 +251,7 @@ export default function PropertyManager({
                       <div style={{ fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--text-main)' }}>
                         <div>👤 <strong>Name:</strong> {tenant.name}</div>
                         <div>📞 <strong>Phone:</strong> {tenant.phone}</div>
-                        <div>📅 <strong>Move-in Date:</strong> {tenant.moveInDate}</div>
+                        <div>📅 <strong>Move-in Date:</strong> {formatDateToDDMMYYYY(tenant.moveInDate)}</div>
                         <div>₹ <strong>Current Rent:</strong> ₹{tenant.rent}/mo</div>
                         
                         {tenant.agreementFile && (

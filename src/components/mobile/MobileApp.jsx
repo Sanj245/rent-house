@@ -19,6 +19,18 @@ import MobileTenantManager from './MobileTenantManager';
 import MobileRentLedger from './MobileRentLedger';
 import MobileTenancyHistory from './MobileTenancyHistory';
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function MobileApp({
   properties,
   setProperties,
@@ -37,10 +49,13 @@ export default function MobileApp({
   scheduleRentRaise,
   updatePaymentStatus,
   updateTenantNotes,
-  handleExportData
+  handleExportData,
+  requestNotificationPermission,
+  loadDemoData
 }) {
   const [activeTab, setActiveTab] = useState('ledger');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
 
   // Sheets Control
@@ -65,19 +80,58 @@ export default function MobileApp({
 
   const closeSheet = () => setActiveSheet(null);
 
+  const houseCode = localStorage.getItem('rentarc_house_code') || '';
+
+  const handleCopyHouseCode = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(houseCode)
+        .then(() => alert('📋 House code copied to clipboard!'))
+        .catch(() => fallbackCopyText(houseCode));
+    } else {
+      fallbackCopyText(houseCode);
+    }
+  };
+
+  const fallbackCopyText = (text) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        alert('📋 House code copied to clipboard!');
+      } else {
+        alert('Unable to copy. Please manually copy the code: ' + text);
+      }
+    } catch (err) {
+      alert('Unable to copy. Please manually copy the code: ' + text);
+    }
+    document.body.removeChild(textArea);
+  };
+
   return (
     <div className="mobile-app-wrapper">
       
       {/* Top Header Bar */}
       <header className="mobile-header-bar">
         <a href="#" className="mobile-app-title" onClick={() => setActiveTab('ledger')}>
-          🏠 Rent<span>Ease</span>
+          🏠 Rent<span>Arc</span>
         </a>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           {/* Notification Button */}
           <button 
-            onClick={() => setShowNotifications(true)}
+            onClick={async () => {
+              if (requestNotificationPermission) {
+                await requestNotificationPermission();
+              }
+              setShowNotifications(true);
+            }}
             style={{
               background: 'none',
               border: 'none',
@@ -90,7 +144,7 @@ export default function MobileApp({
               color: 'var(--mobile-text)'
             }}
           >
-            <Bell size={22} />
+            <Bell size={20} />
             {notifications.length > 0 && (
               <span style={{
                 position: 'absolute',
@@ -102,6 +156,24 @@ export default function MobileApp({
                 borderRadius: '50%'
               }} />
             )}
+          </button>
+
+          {/* Settings Button */}
+          <button 
+            onClick={() => setShowSettings(true)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '6px',
+              color: 'var(--mobile-text)'
+            }}
+            title="Settings & House Code"
+          >
+            <Settings size={20} />
           </button>
         </div>
       </header>
@@ -287,7 +359,7 @@ export default function MobileApp({
                     <div>
                       <div style={{ fontWeight: '700', fontSize: '0.85rem' }}>{n.title}</div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', marginTop: '2px', lineHeight: '1.4' }}>{n.message}</div>
-                      {n.date && <div style={{ fontSize: '0.7rem', color: 'var(--mobile-muted)', marginTop: '4px' }}>📅 Date: {n.date}</div>}
+                      {n.date && <div style={{ fontSize: '0.7rem', color: 'var(--mobile-muted)', marginTop: '4px' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>}
                     </div>
                   </div>
                 ))}
@@ -298,6 +370,163 @@ export default function MobileApp({
               className="mobile-btn mobile-btn-primary" 
               onClick={() => setShowNotifications(false)}
               style={{ width: '100%', marginTop: '10px' }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MOBILE SETTINGS DRAWER OVERLAY */}
+      {showSettings && (
+        <div className="mobile-sheet-overlay" style={{ zIndex: 1200 }} onClick={() => setShowSettings(false)}>
+          <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-handle" />
+            
+            <div className="mobile-sheet-header">
+              <h3 className="mobile-sheet-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚙️ RentArc Settings
+              </h3>
+              <button className="mobile-sheet-close" onClick={() => setShowSettings(false)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '16px' }}>
+              
+              {/* House Code Sync Panel */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: '#fcfbf9',
+                border: '1px solid var(--mobile-border)'
+              }}>
+                <h4 style={{ fontSize: '0.88rem', fontWeight: '800', color: 'var(--mobile-primary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  🏠 Your House Code
+                </h4>
+                <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '12px' }}>
+                  Trusted family members can enter this code on their devices to view and edit the same live database.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{
+                    flexGrow: 1,
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    background: '#ffffff',
+                    border: '1.5px dashed var(--mobile-primary)',
+                    fontFamily: 'monospace',
+                    fontSize: '1.05rem',
+                    fontWeight: '700',
+                    textAlign: 'center',
+                    color: 'var(--mobile-text)'
+                  }}>
+                    {houseCode}
+                  </div>
+                  <button 
+                    onClick={handleCopyHouseCode}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--mobile-primary)',
+                      background: 'rgba(61, 106, 84, 0.08)',
+                      color: 'var(--mobile-primary)',
+                      fontFamily: 'Outfit, sans-serif',
+                      fontWeight: '700',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Backup Option */}
+              <div>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--mobile-text)', marginBottom: '4px' }}>
+                  💾 Backup Offline Copy
+                </h4>
+                <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
+                  Download a physical backup file (`.json`) of all agreements, payments, and registered properties.
+                </p>
+                <button 
+                  className="mobile-btn"
+                  onClick={handleExportData}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '0.85rem',
+                    background: '#f3f4f6',
+                    color: '#374151',
+                    border: '1px solid #e5e7eb',
+                    marginBottom: '16px'
+                  }}
+                >
+                  Download RentArc Backup
+                </button>
+              </div>
+
+              {/* Load Mock Demo Data */}
+              {loadDemoData && (
+                <div style={{
+                  padding: '16px',
+                  borderRadius: '16px',
+                  background: 'rgba(212, 163, 115, 0.08)',
+                  border: '1px dashed #d4a373'
+                }}>
+                  <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#d4a373', marginBottom: '4px' }}>
+                    🛠️ Testing / Mock Demo Data
+                  </h4>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
+                    Populate this house with realistic properties, tenant agreements, payment ledgers, and overdue notifications for testing purposes.
+                  </p>
+                  <button 
+                    className="mobile-btn"
+                    onClick={loadDemoData}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      fontSize: '0.85rem',
+                      background: '#d4a373',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: '700'
+                    }}
+                  >
+                    Load Testing Demo Data
+                  </button>
+                </div>
+              )}
+
+              {/* Log Out button */}
+              <div style={{ borderTop: '1px solid var(--mobile-border)', paddingTop: '16px' }}>
+                <button 
+                  className="mobile-btn"
+                  onClick={() => {
+                    if (window.confirm('Sign out of this house?\n\nYou can re-enter the code anytime to reconnect.')) {
+                      localStorage.removeItem('rentarc_house_code');
+                      window.location.reload();
+                    }
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    color: '#ef4444',
+                    border: '1px solid rgba(239, 68, 68, 0.25)',
+                    fontWeight: '700'
+                  }}
+                >
+                  🚪 Sign Out of House
+                </button>
+              </div>
+
+            </div>
+
+            <button 
+              className="mobile-btn mobile-btn-primary" 
+              onClick={() => setShowSettings(false)}
+              style={{ width: '100%', marginTop: '5px' }}
             >
               Done
             </button>

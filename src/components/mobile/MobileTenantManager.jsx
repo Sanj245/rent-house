@@ -15,6 +15,56 @@ import {
 } from 'lucide-react';
 import PdfInlinePreview from '../PdfInlinePreview';
 
+const compressImage = (file, maxWidth, maxHeight, quality) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataUrl);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === '—') return '—';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+    return dateStr;
+  }
+  return dateStr;
+};
+
 export default function MobileTenantManager({
   tenants,
   properties,
@@ -44,20 +94,21 @@ export default function MobileTenantManager({
   });
   
   useEffect(() => {
-    if (properties.length > 0 && !propertyId) {
-      const vacant = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
-      if (vacant.length > 0) {
-        setPropertyId(vacant[0].id);
-      }
+    const vacant = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
+    const isCurrentVacant = vacant.some(p => p.id === propertyId);
+    if (!isCurrentVacant && vacant.length > 0) {
+      setPropertyId(vacant[0].id);
     }
-  }, [properties, propertyId, tenants]);
+  }, [properties, tenants, propertyId]);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [altPhone, setAltPhone] = useState('');
   const [securityDeposit, setSecurityDeposit] = useState('10000');
   const [rent, setRent] = useState('8000');
-  const [moveInDate, setMoveInDate] = useState('');
+  const [moveInDate, setMoveInDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [description, setDescription] = useState('');
   
   // Documents attachments
@@ -106,62 +157,89 @@ export default function MobileTenantManager({
     setIsRaiseSheetOpen(true);
   };
 
-  const handleAadharFileChange = (e) => {
+  const handleAadharFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Document too large: Please upload documents smaller than 15.0MB.');
-      return;
+    if (file.type.startsWith('image/')) {
+      try {
+        const compressedData = await compressImage(file, 900, 900, 0.75);
+        setAadharFile({
+          name: file.name,
+          size: Math.round(compressedData.length * 0.75),
+          type: 'image/jpeg',
+          data: compressedData
+        });
+      } catch (err) {
+        console.error(err);
+        alert('⚠️ Failed to process image.');
+      }
+    } else {
+      if (file.size > 300 * 1024) {
+        alert('⚠️ PDF File Too Large:\n\nTo ensure reliable synchronization, please upload PDFs smaller than 300 KB. Try compressing your PDF file or uploading a compressed JPG photo instead.');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        setAadharFile({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          data: reader.result 
+        });
+      };
     }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      setAadharFile({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        data: reader.result 
-      });
-    };
   };
 
-  const handleAgreementFileChange = (e) => {
+  const handleAgreementFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Document too large: Please upload agreements smaller than 15.0MB.');
-      return;
+    if (file.type.startsWith('image/')) {
+      try {
+        const compressedData = await compressImage(file, 900, 900, 0.75);
+        setAgreementFile({
+          name: file.name,
+          size: Math.round(compressedData.length * 0.75),
+          type: 'image/jpeg',
+          data: compressedData
+        });
+      } catch (err) {
+        console.error(err);
+        alert('⚠️ Failed to process image.');
+      }
+    } else {
+      if (file.size > 300 * 1024) {
+        alert('⚠️ PDF File Too Large:\n\nTo ensure reliable synchronization, please upload PDFs smaller than 300 KB. Try compressing your PDF file or uploading a compressed JPG photo instead.');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        setAgreementFile({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          data: reader.result 
+        });
+      };
     }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      setAgreementFile({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        data: reader.result 
-      });
-    };
   };
 
-  const handlePhotoChange = (e) => {
+  const handlePhotoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Photo too large: Please upload photos smaller than 15.0MB.');
-      return;
+    try {
+      const compressedData = await compressImage(file, 400, 400, 0.7);
+      setPhoto(compressedData);
+    } catch (err) {
+      console.error(err);
+      alert('⚠️ Failed to process photo.');
     }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      setPhoto(reader.result);
-    };
   };
 
   const calculateRentRaiseDate = (dateStr) => {
@@ -437,7 +515,7 @@ export default function MobileTenantManager({
               </div>
               <div className="mobile-detail-row">
                 <span className="mobile-detail-label">📅 Move-in Date</span>
-                <span className="mobile-detail-value">{selectedTenant.moveInDate}</span>
+                <span className="mobile-detail-value">{formatDateToDDMMYYYY(selectedTenant.moveInDate)}</span>
               </div>
             </div>
 
@@ -540,10 +618,10 @@ export default function MobileTenantManager({
               </h4>
               
               {selectedTenant.raiseApplied ? (
-                <div>Rent raised by {selectedTenant.scheduledRaisePercent}% on {selectedTenant.scheduledRaiseEffectiveDate}.</div>
+                <div>Rent raised by {selectedTenant.scheduledRaisePercent}% on {formatDateToDDMMYYYY(selectedTenant.scheduledRaiseEffectiveDate)}.</div>
               ) : (
                 <div>
-                  Automatic {selectedTenant.scheduledRaisePercent}% Rent Increase on {selectedTenant.scheduledRaiseEffectiveDate}.
+                  Automatic {selectedTenant.scheduledRaisePercent}% Rent Increase on {formatDateToDDMMYYYY(selectedTenant.scheduledRaiseEffectiveDate)}.
                   <br />Rent will raise to <strong>₹{getRaisePreview(selectedTenant.rent, selectedTenant.scheduledRaisePercent).newRent}</strong>.
                 </div>
               )}
