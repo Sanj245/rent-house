@@ -1,5 +1,5 @@
 // Service Worker for RentArc PWA Notification support
-const CACHE_NAME = 'rentarc-v1';
+const CACHE_NAME = 'rentarc-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -31,6 +31,26 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
+  // Use a Network-First strategy for page navigation (HTML) requests
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request)
+        .then((response) => {
+          // Update the cache with the fresh response
+          return caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, response.clone());
+            return response;
+          });
+        })
+        .catch(() => {
+          // Offline fallback
+          return caches.match(e.request);
+        })
+    );
+    return;
+  }
+
+  // Cache-First strategy for static assets
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       return cachedResponse || fetch(e.request);

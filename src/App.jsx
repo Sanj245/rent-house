@@ -205,7 +205,7 @@ export default function App() {
           try {
             const options = {
               body: body,
-              icon: '/favicon.svg',
+              icon: './favicon.svg',
               tag: id,
               requireInteraction: true // Keep notification pinned on desktop lock/home system trays
             };
@@ -262,26 +262,18 @@ export default function App() {
     initPermissions();
   }, []);
 
+  const getPropName = (propertyId) => {
+    const p = properties.find(prop => prop.id === propertyId);
+    return p ? p.name : 'Rental Property';
+  };
+
   useEffect(() => {
     const code = localStorage.getItem('rentarc_house_code');
     if (!code || tenants.length === 0) return;
 
-    // Auto-load demo data if no data present for this house
-    if (properties.length === 0 && tenants.length === 0) {
-      const confirmLoad = window.confirm('No data found for this house. Load mock demo data for testing?');
-      if (confirmLoad) {
-        loadDemoData();
-      }
-    }
-
     const today = new Date();
     const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-    const getPropName = (propertyId) => {
-      const p = properties.find(prop => prop.id === propertyId);
-      return p ? p.name : 'Rental Property';
-    };
 
     tenants.forEach((t) => {
       // 1. Rent Increase Notification (On first day of the increase month)
@@ -294,8 +286,8 @@ export default function App() {
 
           triggerSystemNotification(
             `raise-${t.id}-${t.scheduledRaiseEffectiveDate}`,
-            `📈 Rent Raised: ${t.name}`,
-            `Rent at ${getPropName(t.propertyId)} automatically raised to ₹${raisedRent} today.`
+            `📈 Rent Increased | ${t.name}`,
+            `🏠 Property: ${getPropName(t.propertyId)}\n💰 New Rent: ₹${raisedRent}/month\n⚡ Auto-applied starting today.`
           );
         }
       }
@@ -347,14 +339,14 @@ export default function App() {
             if (diffDays >= 10) {
               triggerSystemNotification(
                 `overdue-10-${t.id}-${timelineKey}`,
-                `🚨 10d Overdue: ${t.name}`,
-                `Rent of ₹${t.rent} (${monthName} ${y}) is 10 days overdue.`
+                `🚨 10d Overdue | ${t.name}`,
+                `🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Status: 10 Days Overdue`
               );
             } else if (diffDays >= 5) {
               triggerSystemNotification(
                 `overdue-5-${t.id}-${timelineKey}`,
-                `⚠️ 5d Overdue: ${t.name}`,
-                `Rent of ₹${t.rent} (${monthName} ${y}) is 5 days overdue.`
+                `⚠️ 5d Overdue | ${t.name}`,
+                `🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Status: 5 Days Overdue`
               );
             }
           }
@@ -383,7 +375,13 @@ export default function App() {
         if (diffDays <= 30 && diffDays >= 0) {
           const raiseAmt    = Math.round((Number(t.rent) * Number(t.scheduledRaisePercent)) / 100);
           const previewRent = Number(t.rent) + raiseAmt;
-          list.push({ id: `upcoming-raise-${t.id}`, title: 'Rent Increase Scheduled', message: `${t.name}'s rent will raise by ${t.scheduledRaisePercent}% to ₹${previewRent} on ${t.scheduledRaiseEffectiveDate} (${diffDays} days left).`, type: 'upcoming-raise', date: t.scheduledRaiseEffectiveDate });
+          list.push({
+            id: `upcoming-raise-${t.id}`,
+            title: '📈 Rent Increase Scheduled',
+            message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 New Rent: ₹${previewRent} (+${t.scheduledRaisePercent}%)\n📅 Effective: ${formatDateToDDMMYYYY(t.scheduledRaiseEffectiveDate)} (${diffDays} days left)`,
+            type: 'upcoming-raise',
+            date: t.scheduledRaiseEffectiveDate
+          });
         }
       }
       if (t.raiseApplied && t.rentHistory) {
@@ -391,7 +389,13 @@ export default function App() {
         if (latestRaise) {
           const diffDays = Math.ceil((today - new Date(latestRaise.date)) / (1000 * 60 * 60 * 24));
           if (diffDays <= 30 && diffDays >= 0) {
-            list.push({ id: `recent-raise-${t.id}`, title: '🎉 Rent Increase Applied', message: `Rent for ${t.name} was automatically increased to ₹${t.rent} starting ${latestRaise.date} (${diffDays} days ago).`, type: 'recent-raise', date: latestRaise.date });
+            list.push({
+              id: `recent-raise-${t.id}`,
+              title: '🎉 Rent Increase Applied',
+              message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 Current Rent: ₹${t.rent}\n📅 Applied: ${formatDateToDDMMYYYY(latestRaise.date)} (${diffDays} days ago)`,
+              type: 'recent-raise',
+              date: latestRaise.date
+            });
           }
         }
       }
@@ -442,7 +446,7 @@ export default function App() {
               list.push({
                 id: `due-${t.id}-${timelineKey}`,
                 title: '💰 Rent Overdue',
-                message: `Rent for ${t.name} (${monthName} ${y}) was due on ${formattedDueDate} and is still pending.`,
+                message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Due Date: ${formattedDueDate}`,
                 type: 'due',
                 date: todayStr
               });
@@ -632,252 +636,7 @@ export default function App() {
     link.click();
   };
 
-  const loadDemoData = async () => {
-    // 1. Request notification permission immediately inside user gesture to guarantee mobile system prompt triggers
-    if (typeof window !== 'undefined' && ('Notification' in window || Capacitor.isNativePlatform())) {
-      try {
-        console.log("Requesting notification permissions inside demo data loader gesture...");
-        await requestNotificationPermission();
-      } catch (err) {
-        console.error("Failed to request permission inside gesture:", err);
-      }
-    }
 
-    const doubleCheck = window.confirm(
-      "⚠️ Load Mock Demo Data?\n\nThis will populate your current house code with realistic mock properties, tenant agreements, payment ledgers, and past histories for comprehensive feature testing.\n\nAny existing data under this house code will be overwritten. Continue?"
-    );
-    if (!doubleCheck) return;
-
-    const today = new Date();
-    const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    
-    // Clear demo local storage keys to ensure fresh notification trigger
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith('sys-notif-')) {
-        localStorage.removeItem(key);
-      }
-    });
-
-    // 1. Mock Properties
-    const demoProperties = [
-      {
-        id: "prop-demo-1",
-        name: "Apartment 302, Emerald Heights",
-        address: "5th Main Road, Indiranagar, Bengaluru",
-        rooms: "3",
-        status: "Occupied",
-        isCashOnly: false,
-        accountName: "HDFC Bank - 501004921",
-        images: [
-          {
-            id: "img-demo-ac",
-            name: "Living Room AC",
-            data: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='50' viewBox='0 0 100 50'><rect width='100' height='50' rx='5' fill='%236c7a89'/><text x='50' y='30' font-family='sans-serif' font-size='12' fill='white' text-anchor='middle'>AC Attached</text></svg>"
-          }
-        ],
-        items: {
-          "Kitchen Chimney": "Excellent",
-          "AC Unit": "Good",
-          "Geyser": "Good"
-        }
-      },
-      {
-        id: "prop-demo-2",
-        name: "Cozy Haven Villa",
-        address: "Koramangala 3rd Block, Bengaluru",
-        rooms: "4",
-        status: "Occupied",
-        isCashOnly: true,
-        accountName: "None",
-        images: [],
-        items: {
-          "Refrigerator": "Good",
-          "Washing Machine": "Good"
-        }
-      },
-      {
-        id: "prop-demo-3",
-        name: "Penthouse 10B, Azure Tower",
-        address: "Outer Ring Road, Marathahalli, Bengaluru",
-        rooms: "2",
-        status: "Occupied",
-        isCashOnly: false,
-        accountName: "SBI Savings - 30294821",
-        images: [],
-        items: {
-          "Smart Lock": "Excellent"
-        }
-      }
-    ];
-
-    // 2. Mock Active Tenants
-    // Aarav Sharma: moved in 2 months ago. Rent for previous month is left unpaid, instantly forcing a 10-day overdue alert.
-    const moveIn1 = new Date(today.getFullYear(), today.getMonth() - 2, 1).toISOString().split('T')[0];
-    
-    // Priya Patel: moved in 11 months ago. Rent raise scheduled for yesterday and NOT applied yet, instantly forcing an active raise calculation alert.
-    const moveIn2 = new Date(today.getFullYear(), today.getMonth() - 11, 1).toISOString().split('T')[0];
-    const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    // Vikram Mehta: moved in 11 months ago. Rent raise scheduled for exactly 15 days in the future, displaying as an upcoming panel notification.
-    const moveIn3 = new Date(today.getFullYear(), today.getMonth() - 11, 15).toISOString().split('T')[0];
-    const fifteenDaysLaterStr = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const demoTenants = [
-      {
-        id: "tenant-demo-1",
-        propertyId: "prop-demo-1",
-        name: "Aarav Sharma",
-        phone: "9876543210",
-        altPhone: "9876543211",
-        description: "IT Professional at TechCorp. Stays with family. Extremely punctual.",
-        securityDeposit: 30000,
-        rent: 20000,
-        moveInDate: moveIn1,
-        scheduledRaisePercent: 10,
-        scheduledRaiseEffectiveDate: new Date(today.getFullYear(), today.getMonth() + 9, 1).toISOString().split('T')[0],
-        raiseApplied: false,
-        rentHistory: [
-          { date: moveIn1, amount: 20000, reason: "Starting Rent" }
-        ],
-        photo: null,
-        aadharFile: null,
-        agreementFile: null
-      },
-      {
-        id: "tenant-demo-2",
-        propertyId: "prop-demo-2",
-        name: "Priya Patel",
-        phone: "8765432109",
-        altPhone: "None",
-        description: "Consultant at BigFour. Single occupant.",
-        securityDeposit: 25000,
-        rent: 15000,
-        moveInDate: moveIn2,
-        scheduledRaisePercent: 8,
-        scheduledRaiseEffectiveDate: yesterdayStr,
-        raiseApplied: false, // Forces instant active raise notification trigger
-        rentHistory: [
-          { date: moveIn2, amount: 15000, reason: "Starting Rent" }
-        ],
-        photo: null,
-        aadharFile: null,
-        agreementFile: null
-      },
-      {
-        id: "tenant-demo-3",
-        propertyId: "prop-demo-3",
-        name: "Vikram Mehta",
-        phone: "9123456789",
-        altPhone: "None",
-        description: "Graphic Designer. Extremely quiet and keeps properties pristine.",
-        securityDeposit: 20000,
-        rent: 12000,
-        moveInDate: moveIn3,
-        scheduledRaisePercent: 10,
-        scheduledRaiseEffectiveDate: fifteenDaysLaterStr, // Shows upcoming raise in Notifications Center
-        raiseApplied: false,
-        rentHistory: [
-          { date: moveIn3, amount: 12000, reason: "Starting Rent" }
-        ],
-        photo: null,
-        aadharFile: null,
-        agreementFile: null
-      }
-    ];
-
-    // 3. Mock Ledger Payments
-    const demoLedger = {
-      "tenant-demo-1": {},
-      "tenant-demo-2": {},
-      "tenant-demo-3": {}
-    };
-
-    // Tenant 1 payments: moved in 2 months ago. Month 1 paid. Month 2 left unpaid to force instant 10-day overdue alert.
-    const t1MoveInDate = new Date(moveIn1);
-    const m1 = new Date(t1MoveInDate.getFullYear(), t1MoveInDate.getMonth(), 1);
-    const m1Key = `${monthsKeysList[m1.getMonth()]}-${m1.getFullYear()}`;
-    demoLedger["tenant-demo-1"][m1Key] = {
-      status: "Paid",
-      rentDue: 20000,
-      paid: 20000,
-      datePaid: new Date(m1.getFullYear(), m1.getMonth(), 5).toISOString().split('T')[0],
-      paymentMethod: "UPI",
-      receivedBy: "SBI Savings - 30294821",
-      notes: "First month payment"
-    };
-
-    // Tenant 2 payments: paid all months up to yesterday
-    const t2MoveInDate = new Date(moveIn2);
-    for (let i = 0; i <= 10; i++) {
-      const d = new Date(t2MoveInDate.getFullYear(), t2MoveInDate.getMonth() + i, 10);
-      if (d > today) break;
-      const monthKey = monthsKeysList[d.getMonth()];
-      const year = d.getFullYear();
-      const timelineKey = `${monthKey}-${year}`;
-      demoLedger["tenant-demo-2"][timelineKey] = {
-        status: "Paid",
-        rentDue: 15000,
-        paid: 15000,
-        datePaid: new Date(year, d.getMonth(), 10).toISOString().split('T')[0],
-        paymentMethod: "Cash",
-        receivedBy: "Landlord",
-        notes: "Paid in cash"
-      };
-    }
-
-    // Tenant 3 payments: paid all months
-    const t3MoveInDate = new Date(moveIn3);
-    for (let i = 0; i <= 10; i++) {
-      const d = new Date(t3MoveInDate.getFullYear(), t3MoveInDate.getMonth() + i, 15);
-      if (d > today) break;
-      const monthKey = monthsKeysList[d.getMonth()];
-      const year = d.getFullYear();
-      const timelineKey = `${monthKey}-${year}`;
-      demoLedger["tenant-demo-3"][timelineKey] = {
-        status: "Paid",
-        rentDue: 12000,
-        paid: 12000,
-        datePaid: new Date(year, d.getMonth(), 15).toISOString().split('T')[0],
-        paymentMethod: "UPI",
-        receivedBy: "SBI Savings - 30294821",
-        notes: "UPI transfers"
-      };
-    }
-
-    // 4. Mock Past Tenancy History
-    const demoPastTenants = [
-      {
-        id: "past-demo-1",
-        name: "Rohan Verma",
-        phone: "9988776655",
-        propertyId: "prop-demo-1",
-        propertyName: "Apartment 302, Emerald Heights",
-        moveInDate: "2024-01-01",
-        moveOutDate: "2024-11-30",
-        totalRentCollected: 220000,
-        securityDeposit: 30000,
-        rent: 20000,
-        deductions: 5000,
-        refundAmount: 25000,
-        vacateNotes: "Cleaned living room, wall paintings repaired."
-      }
-    ];
-
-    setProperties(demoProperties);
-    setTenants(demoTenants);
-    setLedger(demoLedger);
-    setPastTenants(demoPastTenants);
-
-    await saveHouseData(houseCode, {
-      properties: demoProperties,
-      tenants: demoTenants,
-      ledger: demoLedger,
-      pastTenants: demoPastTenants
-    });
-
-    alert("🎉 Ultimate Test Mock Demo Data Loaded Successfully!\n\nYou will instantly receive a 10-day overdue rent alert and a rent raise active notification in your system lock screen and home screen notifications tray!");
-    window.location.reload();
-  };
 
   // ─── Mobile Detection ─────────────────────────────────────────────────────
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -927,7 +686,6 @@ export default function App() {
         updateTenantNotes={updateTenantNotes}
         handleExportData={handleExportData}
         requestNotificationPermission={requestNotificationPermission}
-        loadDemoData={loadDemoData}
       />
     );
   }
@@ -1078,18 +836,7 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Load Mock Demo Data */}
-              <div className="settings-group">
-                <h3 className="settings-title" style={{ color: 'var(--color-secondary)' }}>
-                  🛠️ Developer / Mock Demo Testing Data
-                </h3>
-                <p className="settings-description">
-                  Populate your current house code with mock properties, active agreements, partial payment records, and overdue timelines to test system notifications, visual auto-scrolls, and PDF reporting. Any existing data under this house code will be overwritten.
-                </p>
-                <button className="btn" onClick={loadDemoData} style={{ background: 'var(--color-secondary)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Outfit, sans-serif' }}>
-                  🛠️ Click to Load Demo Testing Data
-                </button>
-              </div>
+
 
               {/* Backup */}
               <div className="settings-group" style={{ borderBottom: 'none', paddingBottom: 0 }}>
@@ -1140,8 +887,8 @@ export default function App() {
                     </div>
                     <div style={{ flexGrow: 1 }}>
                       <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--text-main)' }}>{n.title}</div>
-                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: '1.4' }}>{n.message}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', fontWeight: '500' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px', lineHeight: '1.5', whiteSpace: 'pre-line' }}>{n.message}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', fontWeight: '500' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>
                     </div>
                   </div>
                 ))}

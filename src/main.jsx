@@ -6,7 +6,7 @@ import App from './App.jsx'
 // Register Service Worker for PWA Lockscreen/Homescreen Notifications support
 if ('serviceWorker' in navigator) {
   const registerSW = () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('./sw.js')
       .then((reg) => {
         console.log('Service Worker registered successfully:', reg.scope);
       })

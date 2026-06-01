@@ -50,8 +50,7 @@ export default function MobileApp({
   updatePaymentStatus,
   updateTenantNotes,
   handleExportData,
-  requestNotificationPermission,
-  loadDemoData
+  requestNotificationPermission
 }) {
   const [activeTab, setActiveTab] = useState('ledger');
   const [showNotifications, setShowNotifications] = useState(false);
@@ -359,8 +358,8 @@ export default function MobileApp({
                     </div>
                     <div>
                       <div style={{ fontWeight: '700', fontSize: '0.85rem' }}>{n.title}</div>
-                      <div style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', marginTop: '2px', lineHeight: '1.4' }}>{n.message}</div>
-                      {n.date && <div style={{ fontSize: '0.7rem', color: 'var(--mobile-muted)', marginTop: '4px' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>}
+                      <div style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', marginTop: '4px', lineHeight: '1.5', whiteSpace: 'pre-line' }}>{n.message}</div>
+                      {n.date && <div style={{ fontSize: '0.7rem', color: 'var(--mobile-muted)', marginTop: '6px' }}>📅 Date: {formatDateToDDMMYYYY(n.date)}</div>}
                     </div>
                   </div>
                 ))}
@@ -464,37 +463,6 @@ export default function MobileApp({
                   }}
                 >
                   Download RentArc Backup
-                </button>
-              </div>
-
-              {/* Load Mock Demo Data */}
-              {/* Load Mock Demo Data button always visible */}
-              <div style={{
-                padding: '16px',
-                borderRadius: '16px',
-                background: 'rgba(212, 163, 115, 0.08)',
-                border: '1px dashed #d4a373'
-              }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#d4a373', marginBottom: '4px' }}>
-                  🛠️ Testing / Mock Demo Data
-                </h4>
-                <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
-                  Populate this house with realistic properties, tenant agreements, payment ledgers, and overdue notifications for testing purposes.
-                </p>
-                <button 
-                  className="mobile-btn"
-                  onClick={loadDemoData}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    fontSize: '0.85rem',
-                    background: '#d4a373',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontWeight: '700'
-                  }}
-                >
-                  Load Testing Demo Data
                 </button>
               </div>
 
