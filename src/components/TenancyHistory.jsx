@@ -79,15 +79,20 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
 
     // Build HTML string for the PDF
     const pastRows = propertyPast.length === 0
-      ? `<tr><td colspan="5" style="text-align:center;padding:20px;color:#888;font-style:italic;">No vacated tenants archived yet.</td></tr>`
-      : propertyPast.map(t => `
+      ? `<tr><td colspan="6" style="text-align:center;padding:20px;color:#888;font-style:italic;">No vacated tenants archived yet.</td></tr>`
+      : propertyPast.map(t => {
+          const deductions = t.deductions || 0;
+          const refund = t.refundAmount !== undefined ? t.refundAmount : (t.securityDeposit - deductions);
+          return `
           <tr style="border-bottom:1px solid #e8e4dd;">
             <td style="padding:10px 8px;font-weight:700;">${t.name}</td>
             <td style="padding:10px 8px;color:#555;">${t.phone}</td>
-            <td style="padding:10px 8px;">${formatDateToDDMMYYYY(t.moveInDate)}</td>
-            <td style="padding:10px 8px;font-weight:600;">${formatDateToDDMMYYYY(t.moveOutDate)}</td>
+            <td style="padding:10px 8px;font-size:11px;">In: ${formatDateToDDMMYYYY(t.moveInDate)}<br/><span style="color:#777;">Out: ${formatDateToDDMMYYYY(t.moveOutDate)}</span></td>
+            <td style="padding:10px 8px;font-size:11px;">Deposit: ₹${t.securityDeposit}<br/><span style="color:#d64933;">Deductions: ₹${deductions}</span><br/><span style="color:#3d6a54;font-weight:700;">Refund: ₹${refund}</span></td>
+            <td style="padding:10px 8px;color:#666;font-style:italic;font-size:11.5px;max-width:140px;word-break:break-all;">${t.vacateNotes || '—'}</td>
             <td style="padding:10px 8px;text-align:right;font-weight:800;color:#3d6a54;">₹${Number(t.totalRentCollected).toLocaleString('en-IN')}</td>
-          </tr>`).join('');
+          </tr>`;
+        }).join('');
 
     const html = `
       <!DOCTYPE html>
@@ -180,7 +185,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
           <div class="section-title">📜 Historical Tenancy Registers (${propertyPast.length} archived)</div>
           <table>
             <thead><tr>
-              <th>Past Tenant</th><th>Phone No.</th><th>Move-In</th><th>Move-Out</th><th style="text-align:right;">Rent Collected</th>
+              <th>Past Tenant</th><th>Phone No.</th><th>Move-In / Out</th><th>Deposit Settlement</th><th>Checkout Notes</th><th style="text-align:right;">Rent Collected</th>
             </tr></thead>
             <tbody>${pastRows}</tbody>
           </table>
@@ -443,8 +448,9 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                         <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: '800', textTransform: 'uppercase' }}>
                           <th style={{ padding: '10px 8px' }}>👤 Past Tenant</th>
                           <th style={{ padding: '10px 8px' }}>📞 Phone Number</th>
-                          <th style={{ padding: '10px 8px' }}>📅 Move-In</th>
-                          <th style={{ padding: '10px 8px' }}>📅 Move-Out</th>
+                          <th style={{ padding: '10px 8px' }}>📅 Move-In / Out</th>
+                          <th style={{ padding: '10px 8px' }}>🔐 Deposit Refund</th>
+                          <th style={{ padding: '10px 8px' }}>📝 Checkout Notes</th>
                           <th style={{ padding: '10px 8px', textAlign: 'right' }}>💵 Rent Collected</th>
                         </tr>
                       </thead>
@@ -475,11 +481,23 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                             <td style={{ padding: '12px 8px', color: 'var(--text-muted)', fontWeight: '600' }}>
                               {tenant.phone}
                             </td>
-                            <td style={{ padding: '12px 8px', color: 'var(--text-main)' }}>
-                              {formatDateToDDMMYYYY(tenant.moveInDate)}
+                            <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontSize: '0.84rem' }}>
+                              <div>In: {formatDateToDDMMYYYY(tenant.moveInDate)}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>Out: {formatDateToDDMMYYYY(tenant.moveOutDate)}</div>
                             </td>
-                            <td style={{ padding: '12px 8px', color: 'var(--text-main)', fontWeight: '600' }}>
-                              {formatDateToDDMMYYYY(tenant.moveOutDate)}
+                            <td style={{ padding: '12px 8px', fontSize: '0.84rem' }}>
+                              <div>Deposit: ₹{tenant.securityDeposit}</div>
+                              {tenant.deductions > 0 ? (
+                                <div style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginTop: '2px' }}>
+                                  Deductions: -₹{tenant.deductions}
+                                </div>
+                              ) : null}
+                              <div style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.78rem', marginTop: '2px' }}>
+                                Refund: ₹{tenant.refundAmount !== undefined ? tenant.refundAmount : (tenant.securityDeposit - (tenant.deductions || 0))}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 8px', fontSize: '0.84rem', color: 'var(--text-muted)', fontStyle: 'italic', maxWidth: '160px', wordBreak: 'break-word' }}>
+                              {tenant.vacateNotes || '—'}
                             </td>
                             <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)', fontSize: '1rem' }}>
                               ₹{tenant.totalRentCollected}

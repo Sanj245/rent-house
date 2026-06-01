@@ -190,6 +190,7 @@ export default function App() {
                 id: intId,
                 schedule: { at: new Date(Date.now() + 100) }, // schedule almost immediately
                 sound: 'default',
+                channelId: 'rentarc-alerts' // Use high-priority lock-screen channel
               }
             ]
           });
@@ -204,7 +205,9 @@ export default function App() {
           try {
             new Notification(title, {
               body: body,
-              icon: '/favicon.ico'
+              icon: '/favicon.ico',
+              tag: id,
+              requireInteraction: true // Keep notification pinned on desktop lock/home system trays
             });
             localStorage.setItem(storageKey, 'triggered');
           } catch (err) {
@@ -223,8 +226,19 @@ export default function App() {
           if (perm.display === 'default') {
             await LocalNotifications.requestPermissions();
           }
+          // Create high-priority lock-screen visible notification channel
+          await LocalNotifications.createChannel({
+            id: 'rentarc-alerts',
+            name: 'RentArc Alerts',
+            description: 'High priority alerts for rent raises and overdue payments',
+            importance: 5, // max priority for heads-up alert
+            visibility: 1, // public visibility (visible on lockscreen)
+            sound: 'default',
+            vibration: true,
+            lights: true
+          });
         } catch (err) {
-          console.error('Error checking local notification permissions:', err);
+          console.error('Error checking local notification permissions/creating channel:', err);
         }
       } else {
         if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -240,6 +254,14 @@ export default function App() {
   useEffect(() => {
     const code = localStorage.getItem('rentarc_house_code');
     if (!code || tenants.length === 0) return;
+
+    // Auto-load demo data if no data present for this house
+    if (properties.length === 0 && tenants.length === 0) {
+      const confirmLoad = window.confirm('No data found for this house. Load mock demo data for testing?');
+      if (confirmLoad) {
+        loadDemoData();
+      }
+    }
 
     const today = new Date();
     const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -419,6 +441,8 @@ export default function App() {
       }
     });
 
+    // Disable repair notifications per user request
+    /*
     properties.forEach((p) => {
       if (p.items) {
         Object.entries(p.items).forEach(([item, condition]) => {
@@ -428,6 +452,7 @@ export default function App() {
         });
       }
     });
+    */
 
     return list;
   };
@@ -509,7 +534,7 @@ export default function App() {
     saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger });
   };
 
-  const removeTenant = (tenantId, propertyId) => {
+  const removeTenant = (tenantId, propertyId, deductions = 0, refundAmount = null, vacateNotes = '') => {
     const tenant       = stateRef.current.tenants.find((t) => t.id === tenantId);
     let newPastTenants = stateRef.current.pastTenants;
 
@@ -530,7 +555,12 @@ export default function App() {
         propertyId: tenant.propertyId,
         propertyName: stateRef.current.properties.find((p) => p.id === tenant.propertyId)?.name || 'Unknown',
         moveInDate: tenant.moveInDate, moveOutDate: new Date().toISOString().split('T')[0],
-        totalRentCollected, securityDeposit: tenant.securityDeposit, rent: tenant.rent,
+        totalRentCollected, 
+        securityDeposit: Number(tenant.securityDeposit), 
+        rent: Number(tenant.rent),
+        deductions: Number(deductions),
+        refundAmount: refundAmount !== null ? Number(refundAmount) : (Number(tenant.securityDeposit) - Number(deductions)),
+        vacateNotes: vacateNotes || ''
       };
       newPastTenants = [...stateRef.current.pastTenants, pastRecord];
     }
@@ -600,6 +630,13 @@ export default function App() {
     const today = new Date();
     const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     
+    // Clear demo local storage keys to ensure fresh notification trigger
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sys-notif-')) {
+        localStorage.removeItem(key);
+      }
+    });
+
     // 1. Mock Properties
     const demoProperties = [
       {
@@ -619,7 +656,7 @@ export default function App() {
         ],
         items: {
           "Kitchen Chimney": "Excellent",
-          "AC Unit": "Needs Repair",
+          "AC Unit": "Good",
           "Geyser": "Good"
         }
       },
@@ -642,7 +679,7 @@ export default function App() {
         name: "Penthouse 10B, Azure Tower",
         address: "Outer Ring Road, Marathahalli, Bengaluru",
         rooms: "2",
-        status: "Vacant",
+        status: "Occupied",
         isCashOnly: false,
         accountName: "SBI Savings - 30294821",
         images: [],
@@ -653,14 +690,16 @@ export default function App() {
     ];
 
     // 2. Mock Active Tenants
-    const moveIn1 = new Date(today.getFullYear(), today.getMonth() - 11, 1).toISOString().split('T')[0];
-    const moveIn2 = new Date(today.getFullYear(), today.getMonth() - 3, 10).toISOString().split('T')[0];
+    // Aarav Sharma: moved in 2 months ago. Rent for previous month is left unpaid, instantly forcing a 10-day overdue alert.
+    const moveIn1 = new Date(today.getFullYear(), today.getMonth() - 2, 1).toISOString().split('T')[0];
+    
+    // Priya Patel: moved in 11 months ago. Rent raise scheduled for yesterday and NOT applied yet, instantly forcing an active raise calculation alert.
+    const moveIn2 = new Date(today.getFullYear(), today.getMonth() - 11, 1).toISOString().split('T')[0];
+    const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const getRaiseDate = (dateStr) => {
-      const d = new Date(dateStr);
-      d.setMonth(d.getMonth() + 11);
-      return d.toISOString().split('T')[0];
-    };
+    // Vikram Mehta: moved in 11 months ago. Rent raise scheduled for exactly 15 days in the future, displaying as an upcoming panel notification.
+    const moveIn3 = new Date(today.getFullYear(), today.getMonth() - 11, 15).toISOString().split('T')[0];
+    const fifteenDaysLaterStr = new Date(today.getTime() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const demoTenants = [
       {
@@ -674,8 +713,8 @@ export default function App() {
         rent: 20000,
         moveInDate: moveIn1,
         scheduledRaisePercent: 10,
-        scheduledRaiseEffectiveDate: getRaiseDate(moveIn1),
-        raiseApplied: today >= new Date(getRaiseDate(moveIn1)),
+        scheduledRaiseEffectiveDate: new Date(today.getFullYear(), today.getMonth() + 9, 1).toISOString().split('T')[0],
+        raiseApplied: false,
         rentHistory: [
           { date: moveIn1, amount: 20000, reason: "Starting Rent" }
         ],
@@ -694,10 +733,30 @@ export default function App() {
         rent: 15000,
         moveInDate: moveIn2,
         scheduledRaisePercent: 8,
-        scheduledRaiseEffectiveDate: getRaiseDate(moveIn2),
-        raiseApplied: false,
+        scheduledRaiseEffectiveDate: yesterdayStr,
+        raiseApplied: false, // Forces instant active raise notification trigger
         rentHistory: [
           { date: moveIn2, amount: 15000, reason: "Starting Rent" }
+        ],
+        photo: null,
+        aadharFile: null,
+        agreementFile: null
+      },
+      {
+        id: "tenant-demo-3",
+        propertyId: "prop-demo-3",
+        name: "Vikram Mehta",
+        phone: "9123456789",
+        altPhone: "None",
+        description: "Graphic Designer. Extremely quiet and keeps properties pristine.",
+        securityDeposit: 20000,
+        rent: 12000,
+        moveInDate: moveIn3,
+        scheduledRaisePercent: 10,
+        scheduledRaiseEffectiveDate: fifteenDaysLaterStr, // Shows upcoming raise in Notifications Center
+        raiseApplied: false,
+        rentHistory: [
+          { date: moveIn3, amount: 12000, reason: "Starting Rent" }
         ],
         photo: null,
         aadharFile: null,
@@ -705,75 +764,63 @@ export default function App() {
       }
     ];
 
-    if (demoTenants[0].raiseApplied) {
-      demoTenants[0].rent = 22000;
-      demoTenants[0].rentHistory.push({
-        date: demoTenants[0].scheduledRaiseEffectiveDate,
-        amount: 22000,
-        reason: "Automatic 10% Raise Applied"
-      });
-    }
-
     // 3. Mock Ledger Payments
     const demoLedger = {
       "tenant-demo-1": {},
-      "tenant-demo-2": {}
+      "tenant-demo-2": {},
+      "tenant-demo-3": {}
     };
 
+    // Tenant 1 payments: moved in 2 months ago. Month 1 paid. Month 2 left unpaid to force instant 10-day overdue alert.
     const t1MoveInDate = new Date(moveIn1);
-    for (let i = 0; i <= 11; i++) {
-      const d = new Date(t1MoveInDate.getFullYear(), t1MoveInDate.getMonth() + i, 1);
-      if (d > today) break;
-      const monthKey = monthsKeysList[d.getMonth()];
-      const year = d.getFullYear();
-      const timelineKey = `${monthKey}-${year}`;
-      
-      const isRaiseMonth = d >= new Date(demoTenants[0].scheduledRaiseEffectiveDate);
-      const computedRent = isRaiseMonth ? 22000 : 20000;
+    const m1 = new Date(t1MoveInDate.getFullYear(), t1MoveInDate.getMonth(), 1);
+    const m1Key = `${monthsKeysList[m1.getMonth()]}-${m1.getFullYear()}`;
+    demoLedger["tenant-demo-1"][m1Key] = {
+      status: "Paid",
+      rentDue: 20000,
+      paid: 20000,
+      datePaid: new Date(m1.getFullYear(), m1.getMonth(), 5).toISOString().split('T')[0],
+      paymentMethod: "UPI",
+      receivedBy: "SBI Savings - 30294821",
+      notes: "First month payment"
+    };
 
-      if (i < 9) {
-        demoLedger["tenant-demo-1"][timelineKey] = {
-          status: "Paid",
-          rentDue: computedRent,
-          paid: computedRent,
-          datePaid: new Date(year, d.getMonth(), 5).toISOString().split('T')[0],
-          paymentMethod: "UPI",
-          receivedBy: "SBI Savings - 30294821",
-          notes: "Automated monthly payment"
-        };
-      } else if (i === 9) {
-        demoLedger["tenant-demo-1"][timelineKey] = {
-          status: "Partial",
-          rentDue: computedRent,
-          paid: computedRent - 5000,
-          remaining: 5000,
-          datePaid: new Date(year, d.getMonth(), 8).toISOString().split('T')[0],
-          paymentMethod: "UPI",
-          receivedBy: "SBI Savings - 30294821",
-          notes: "Told will pay remaining tomorrow"
-        };
-      }
-    }
-
+    // Tenant 2 payments: paid all months up to yesterday
     const t2MoveInDate = new Date(moveIn2);
-    for (let i = 0; i <= 3; i++) {
+    for (let i = 0; i <= 10; i++) {
       const d = new Date(t2MoveInDate.getFullYear(), t2MoveInDate.getMonth() + i, 10);
       if (d > today) break;
       const monthKey = monthsKeysList[d.getMonth()];
       const year = d.getFullYear();
       const timelineKey = `${monthKey}-${year}`;
+      demoLedger["tenant-demo-2"][timelineKey] = {
+        status: "Paid",
+        rentDue: 15000,
+        paid: 15000,
+        datePaid: new Date(year, d.getMonth(), 10).toISOString().split('T')[0],
+        paymentMethod: "Cash",
+        receivedBy: "Landlord",
+        notes: "Paid in cash"
+      };
+    }
 
-      if (i < 2) {
-        demoLedger["tenant-demo-2"][timelineKey] = {
-          status: "Paid",
-          rentDue: 15000,
-          paid: 15000,
-          datePaid: new Date(year, d.getMonth(), 10).toISOString().split('T')[0],
-          paymentMethod: "Cash",
-          receivedBy: "Landlord",
-          notes: "Paid in cash"
-        };
-      }
+    // Tenant 3 payments: paid all months
+    const t3MoveInDate = new Date(moveIn3);
+    for (let i = 0; i <= 10; i++) {
+      const d = new Date(t3MoveInDate.getFullYear(), t3MoveInDate.getMonth() + i, 15);
+      if (d > today) break;
+      const monthKey = monthsKeysList[d.getMonth()];
+      const year = d.getFullYear();
+      const timelineKey = `${monthKey}-${year}`;
+      demoLedger["tenant-demo-3"][timelineKey] = {
+        status: "Paid",
+        rentDue: 12000,
+        paid: 12000,
+        datePaid: new Date(year, d.getMonth(), 15).toISOString().split('T')[0],
+        paymentMethod: "UPI",
+        receivedBy: "SBI Savings - 30294821",
+        notes: "UPI transfers"
+      };
     }
 
     // 4. Mock Past Tenancy History
@@ -788,7 +835,10 @@ export default function App() {
         moveOutDate: "2024-11-30",
         totalRentCollected: 220000,
         securityDeposit: 30000,
-        rent: 20000
+        rent: 20000,
+        deductions: 5000,
+        refundAmount: 25000,
+        vacateNotes: "Cleaned living room, wall paintings repaired."
       }
     ];
 
@@ -804,7 +854,7 @@ export default function App() {
       pastTenants: demoPastTenants
     });
 
-    alert("🎉 Mock Demo Data Loaded Successfully!\n\nYou now have active properties, agreements, partial payments, and overdue timelines to fully test all features.");
+    alert("🎉 Ultimate Test Mock Demo Data Loaded Successfully!\n\nYou will instantly receive a 10-day overdue rent alert and a rent raise active notification in your system lock screen and home screen notifications tray!");
     window.location.reload();
   };
 
@@ -973,7 +1023,7 @@ export default function App() {
             <PropertyManager properties={properties} tenants={tenants} addProperty={addProperty} editProperty={editProperty} deleteProperty={deleteProperty} />
           )}
           {currentTab === 'tenants' && (
-            <TenantManager tenants={tenants} properties={properties} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} />
+            <TenantManager tenants={tenants} properties={properties} ledger={ledger} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} />
           )}
           {currentTab === 'ledger' && (
             <RentLedger tenants={tenants} properties={properties} ledger={ledger} updatePaymentStatus={updatePaymentStatus} updateTenantNotes={updateTenantNotes} />

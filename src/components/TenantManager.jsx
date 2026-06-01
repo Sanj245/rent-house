@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Plus, Phone, Calendar, FileText, Upload, Edit3, X, ArrowUpRight, CreditCard, Shield, Image as ImageIcon } from 'lucide-react';
+import { Users, Plus, Phone, Calendar, FileText, Upload, Edit3, X, ArrowUpRight, CreditCard, Shield, Image as ImageIcon, AlertTriangle, CheckCircle, DollarSign, Check } from 'lucide-react';
 import PdfInlinePreview from './PdfInlinePreview';
 
 const formatDateToDDMMYYYY = (dateStr) => {
@@ -17,6 +17,7 @@ const formatDateToDDMMYYYY = (dateStr) => {
 export default function TenantManager({ 
   tenants, 
   properties, 
+  ledger = {},
   addTenant, 
   removeTenant, 
   updateTenantRent 
@@ -28,6 +29,75 @@ export default function TenantManager({
   const [selectedTenant, setSelectedTenant] = useState(null);
   const [newRaisePercent, setNewRaisePercent] = useState('10');
   const [effectiveDate, setEffectiveDate] = useState('');
+
+  // Stateful Vacate Modal States
+  const [tenantToVacate, setTenantToVacate] = useState(null);
+  const [vacateDeductions, setVacateDeductions] = useState(0);
+  const [vacateDeductionReason, setVacateDeductionReason] = useState('');
+  const [keysReturned, setKeysReturned] = useState(false);
+  const [utilitiesCleared, setUtilitiesCleared] = useState(false);
+  const [damageInspected, setDamageInspected] = useState(false);
+
+  // Outstanding Rent Dues Calculator
+  const getOutstandingDues = (tenant) => {
+    if (!tenant || !tenant.moveInDate) return [];
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonthIndex = today.getMonth();
+    const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const parts = tenant.moveInDate.split('-');
+    const moveInYear = parseInt(parts[0], 10);
+    const moveInMonth = parseInt(parts[1], 10); // 1-indexed
+
+    const startAbsolute = (moveInYear - 2020) * 12 + (moveInMonth - 1);
+    const currentAbsolute = (currentYear - 2020) * 12 + currentMonthIndex;
+    
+    const tenantPayments = ledger[tenant.id] || {};
+    const outstanding = [];
+
+    for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
+      const y = 2020 + Math.floor(abs / 12);
+      const m = abs % 12;
+      const monthKey = monthsKeysList[m];
+      const monthName = monthsNamesList[m];
+      const timelineKey = `${monthKey}-${y}`;
+
+      const payData = tenantPayments[timelineKey] !== undefined
+        ? tenantPayments[timelineKey]
+        : (y === 2026 ? tenantPayments[monthKey] : undefined);
+
+      let status = 'Unpaid';
+      let paidAmt = 0;
+      let rentAmt = tenant.rent; // fallback
+
+      if (payData) {
+        if (typeof payData === 'string') {
+          status = payData;
+          paidAmt = payData === 'Paid' ? tenant.rent : 0;
+        } else {
+          status = payData.status || 'Unpaid';
+          paidAmt = payData.paid !== undefined ? Number(payData.paid) : 0;
+          rentAmt = payData.rentDue !== undefined ? Number(payData.rentDue) : tenant.rent;
+        }
+      }
+
+      if (status !== 'Paid') {
+        outstanding.push({
+          monthName,
+          year: y,
+          status,
+          paidAmount: paidAmt,
+          rentDue: rentAmt,
+          timelineKey
+        });
+      }
+    }
+
+    return outstanding;
+  };
 
   // Add Tenant Form States
   const [propertyId, setPropertyId] = useState('');
@@ -219,13 +289,12 @@ export default function TenantManager({
   };
 
   const handleRemove = (tenant) => {
-    const propName = getPropertyName(tenant.propertyId);
-    const doubleCheck = window.confirm(
-      `⚠️ End Tenancy: Vacate tenant "${tenant.name}" from "${propName}"?\n\nRemember to return their security deposit (₹${tenant.securityDeposit}).`
-    );
-    if (doubleCheck) {
-      removeTenant(tenant.id, tenant.propertyId);
-    }
+    setTenantToVacate(tenant);
+    setVacateDeductions(0);
+    setVacateDeductionReason('');
+    setKeysReturned(false);
+    setUtilitiesCleared(false);
+    setDamageInspected(false);
   };
 
   function getPropertyName(id) {
@@ -907,6 +976,187 @@ export default function TenantManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stateful Vacate Checklist & Settlement Modal */}
+      {tenantToVacate && (
+        <div className="modal-overlay" style={{ zIndex: 2500 }}>
+          <div className="modal-content" style={{ maxWidth: '580px', borderRadius: 'var(--radius-lg)', padding: '28px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '14px', marginBottom: '20px' }}>
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '1.4rem' }}>
+                🚪 Vacate Property Checklist
+              </h3>
+              <button 
+                onClick={() => setTenantToVacate(null)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: '700', color: 'var(--text-main)' }}>
+                Ending Tenancy Cycle for <span style={{ color: 'var(--color-secondary)' }}>{tenantToVacate.name}</span>
+              </div>
+              <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Property: <strong>{getPropertyName(tenantToVacate.propertyId)}</strong>
+              </div>
+            </div>
+
+            {/* DUES CHECKER PANEL */}
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                💸 Rent Dues Ledger Audit
+              </h4>
+              
+              {(() => {
+                const outstanding = getOutstandingDues(tenantToVacate);
+                if (outstanding.length === 0) {
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: 'var(--color-primary-light)', border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-md)', color: 'var(--color-primary)', fontSize: '0.88rem', fontWeight: '600' }}>
+                      <CheckCircle size={18} />
+                      All monthly payments are fully cleared in the ledger!
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px dashed #ef4444', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.85rem', fontWeight: '700' }}>
+                      <AlertTriangle size={18} />
+                      Warning: Tenant has {outstanding.length} month(s) with pending rent dues!
+                    </div>
+                    <div style={{ maxHeight: '120px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-app)', padding: '6px' }}>
+                      {outstanding.map((d, index) => (
+                        <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', borderBottom: index === outstanding.length - 1 ? 'none' : '1px solid var(--border-color)', fontSize: '0.84rem' }}>
+                          <span style={{ fontWeight: '700' }}>📅 {d.monthName} {d.year}</span>
+                          <span style={{ color: '#ef4444', fontWeight: '700' }}>
+                            {d.status === 'Partial' ? `Partial (Paid ₹${d.paidAmount} / Due ₹${d.rentDue})` : `Unpaid (₹${d.rentDue})`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* SECURITY DEPOSIT SETTLEMENT LEDGER */}
+            <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '12px' }}>
+                🔐 Security Deposit Settlement
+              </h4>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: '600' }}>Initial Deposit Received</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-purple)', marginTop: '2px' }}>₹{tenantToVacate.securityDeposit}</div>
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Deductions Amount (₹)</label>
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    value={vacateDeductions}
+                    onChange={(e) => setVacateDeductions(Math.max(0, Number(e.target.value)))}
+                    style={{ padding: '6px 10px', fontSize: '0.9rem' }}
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '14px' }}>
+                <label className="form-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Deduction Reason / Settlement Notes</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={vacateDeductionReason}
+                  onChange={(e) => setVacateDeductionReason(e.target.value)}
+                  placeholder="e.g. Cleaning dues, wall painting, kitchen AC repair..."
+                  style={{ padding: '8px 10px', fontSize: '0.88rem' }}
+                />
+              </div>
+
+              <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>Net Refund to Tenant:</div>
+                <div style={{ fontSize: '1.35rem', fontWeight: '900', color: 'var(--color-primary)' }}>
+                  ₹{Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions))}
+                </div>
+              </div>
+            </div>
+
+            {/* CHECKLIST STEPS */}
+            <div style={{ marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.5px', marginBottom: '12px' }}>
+                📝 Physical Move-Out Checklist
+              </h4>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.92rem' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={keysReturned} 
+                    onChange={(e) => setKeysReturned(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  🗝️ All sets of keys collected and verified
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.92rem' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={utilitiesCleared} 
+                    onChange={(e) => setUtilitiesCleared(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  ⚡ Electricity, water, and utility bills cleared
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.92rem' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={damageInspected} 
+                    onChange={(e) => setDamageInspected(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  />
+                  🛠️ Property inspected thoroughly for damages
+                </label>
+              </div>
+            </div>
+
+            {/* WARNING ALERT */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.8rem', lineHeight: '1.4', marginBottom: '24px' }}>
+              <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <strong>Warning:</strong> Vacating this property ends the agreement cycle permanently, frees up the home to "Vacant", and archives these checkout details into your historical logs. This action cannot be undone.
+              </div>
+            </div>
+
+            {/* ACTIONS */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setTenantToVacate(null)}
+                style={{ flexGrow: 1, minHeight: '44px', fontWeight: '700' }}
+              >
+                Keep Active
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={() => {
+                  const refund = Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions));
+                  removeTenant(tenantToVacate.id, tenantToVacate.propertyId, vacateDeductions, refund, vacateDeductionReason);
+                  setTenantToVacate(null);
+                }}
+                style={{ flexGrow: 1, minHeight: '44px', fontWeight: '800' }}
+              >
+                🚪 Confirm & Archive
+              </button>
+            </div>
           </div>
         </div>
       )}

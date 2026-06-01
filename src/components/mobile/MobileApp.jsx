@@ -158,7 +158,7 @@ export default function MobileApp({
             )}
           </button>
 
-          {/* Settings Button */}
+          {/* Settings Button with label */}
           <button 
             onClick={() => setShowSettings(true)}
             style={{
@@ -171,9 +171,9 @@ export default function MobileApp({
               padding: '6px',
               color: 'var(--mobile-text)'
             }}
-            title="Settings & House Code"
-          >
+            title="Settings & House Code">
             <Settings size={20} />
+            <span style={{ marginLeft: '4px', fontSize: '0.85rem', fontFamily: 'Outfit, sans-serif' }}>Settings</span>
           </button>
         </div>
       </header>
@@ -201,6 +201,7 @@ export default function MobileApp({
           <MobileTenantManager
             tenants={tenants}
             properties={properties}
+            ledger={ledger}
             addTenant={addTenant}
             removeTenant={removeTenant}
             scheduleRentRaise={scheduleRentRaise}
@@ -467,36 +468,35 @@ export default function MobileApp({
               </div>
 
               {/* Load Mock Demo Data */}
-              {loadDemoData && (
-                <div style={{
-                  padding: '16px',
-                  borderRadius: '16px',
-                  background: 'rgba(212, 163, 115, 0.08)',
-                  border: '1px dashed #d4a373'
-                }}>
-                  <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#d4a373', marginBottom: '4px' }}>
-                    🛠️ Testing / Mock Demo Data
-                  </h4>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
-                    Populate this house with realistic properties, tenant agreements, payment ledgers, and overdue notifications for testing purposes.
-                  </p>
-                  <button 
-                    className="mobile-btn"
-                    onClick={loadDemoData}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      fontSize: '0.85rem',
-                      background: '#d4a373',
-                      color: '#ffffff',
-                      border: 'none',
-                      fontWeight: '700'
-                    }}
-                  >
-                    Load Testing Demo Data
-                  </button>
-                </div>
-              )}
+              {/* Load Mock Demo Data button always visible */}
+              <div style={{
+                padding: '16px',
+                borderRadius: '16px',
+                background: 'rgba(212, 163, 115, 0.08)',
+                border: '1px dashed #d4a373'
+              }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: '#d4a373', marginBottom: '4px' }}>
+                  🛠️ Testing / Mock Demo Data
+                </h4>
+                <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
+                  Populate this house with realistic properties, tenant agreements, payment ledgers, and overdue notifications for testing purposes.
+                </p>
+                <button 
+                  className="mobile-btn"
+                  onClick={loadDemoData}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    fontSize: '0.85rem',
+                    background: '#d4a373',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: '700'
+                  }}
+                >
+                  Load Testing Demo Data
+                </button>
+              </div>
 
               {/* Log Out button */}
               <div style={{ borderTop: '1px solid var(--mobile-border)', paddingTop: '16px' }}>
@@ -555,6 +555,7 @@ export default function MobileApp({
         <MobileTenantManager
           tenants={tenants}
           properties={properties}
+          ledger={ledger}
           addTenant={addTenant}
           removeTenant={removeTenant}
           scheduleRentRaise={scheduleRentRaise}

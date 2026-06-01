@@ -301,6 +301,18 @@ export default function MobileTenancyHistory({
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--mobile-muted)', marginTop: '2px' }}>
                             <div>📞 Contact: <strong>{past.phone}</strong></div>
                             <div>📅 Tenure: <strong>{formatDateToDDMMYYYY(past.moveInDate)}</strong> to <strong>{formatDateToDDMMYYYY(past.moveOutDate)}</strong></div>
+                            
+                            <div style={{ borderTop: '1px dashed var(--mobile-border)', marginTop: '6px', paddingTop: '6px', fontSize: '0.7rem' }}>
+                              <strong>🔐 Deposit:</strong> ₹{past.securityDeposit}
+                              {past.deductions > 0 ? ` | Deductions: ₹${past.deductions}` : ''}
+                              {' | '}<strong>Refund:</strong> <span style={{ color: 'var(--mobile-primary)', fontWeight: '700' }}>₹{past.refundAmount !== undefined ? past.refundAmount : (past.securityDeposit - (past.deductions || 0))}</span>
+                            </div>
+
+                            {past.vacateNotes && (
+                              <div style={{ fontSize: '0.7rem', fontStyle: 'italic', marginTop: '4px', backgroundColor: '#f9f9f6', padding: '4px 8px', borderRadius: '6px', borderLeft: '2.5px solid var(--mobile-secondary)' }}>
+                                📝 Notes: {past.vacateNotes}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

@@ -22,6 +22,10 @@ export default function PropertyManager({
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProp, setEditingProp] = useState(null);
+
+  // Stateful Delete Property Modal States
+  const [propertyToDelete, setPropertyToDelete] = useState(null);
+  const [deleteVerified, setDeleteVerified] = useState(false);
   
   // Form States
   const [name, setName] = useState('');
@@ -149,12 +153,10 @@ export default function PropertyManager({
   };
 
   const handleDelete = (id, propName) => {
-    const doubleCheck = window.confirm(
-      `⚠️ Delete Property: Are you sure you want to remove "${propName}"?\n\nThis removes all linked agreement logs. This action cannot be undone.`
-    );
-    if (doubleCheck) {
-      deleteProperty(id);
-    }
+    const prop = properties.find(p => p.id === id);
+    const tenant = tenants.find(t => t.propertyId === id);
+    setPropertyToDelete({ ...prop, tenantName: tenant ? tenant.name : null });
+    setDeleteVerified(false);
   };
 
   return (
@@ -541,6 +543,90 @@ export default function PropertyManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stateful Modern Delete Property Modal */}
+      {propertyToDelete && (
+        <div className="modal-overlay" style={{ zIndex: 2600 }}>
+          <div className="modal-content" style={{ maxWidth: '460px', borderRadius: 'var(--radius-lg)', padding: '28px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '16px' }}>
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '1.25rem', fontWeight: '800' }}>
+                ⚠️ Delete Property Registry
+              </h3>
+              <button 
+                onClick={() => setPropertyToDelete(null)} 
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: '700', color: 'var(--text-main)' }}>
+                Are you sure you want to remove <span style={{ color: 'var(--color-secondary)' }}>"{propertyToDelete.name}"</span>?
+              </div>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                Address: <strong>{propertyToDelete.address}</strong>
+              </div>
+            </div>
+
+            {/* DANGER ALERTS & WARNINGS */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.84rem', lineHeight: '1.4' }}>
+                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Permanent Data Loss:</strong> This action deletes the property registry, associated inventory assets/appliance photos, and all historic transaction ledger cycles from database logs.
+                </div>
+              </div>
+
+              {propertyToDelete.tenantName && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '12px', backgroundColor: 'rgba(212, 163, 115, 0.06)', border: '1px solid rgba(212, 163, 115, 0.15)', borderRadius: 'var(--radius-md)', color: 'var(--color-secondary)', fontSize: '0.84rem', lineHeight: '1.4' }}>
+                  <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong>Active Occupant Warning:</strong> This home is currently occupied by <strong>{propertyToDelete.tenantName}</strong>. Confirming deletion will vacate the resident and archive their lease dossier!
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* SAFETY CHECKBOX VERIFICATION */}
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '0.88rem', fontWeight: '700', userSelect: 'none', color: 'var(--text-main)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={deleteVerified} 
+                  onChange={(e) => setDeleteVerified(e.target.checked)}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#ef4444' }}
+                />
+                I understand the permanent impact of this action
+              </label>
+            </div>
+
+            {/* ACTIONS */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setPropertyToDelete(null)}
+                style={{ flexGrow: 1, minHeight: '42px', fontWeight: '700' }}
+              >
+                Keep Registry
+              </button>
+              <button 
+                type="button" 
+                className="btn btn-danger" 
+                onClick={() => {
+                  deleteProperty(propertyToDelete.id);
+                  setPropertyToDelete(null);
+                }}
+                disabled={!deleteVerified}
+                style={{ flexGrow: 1, minHeight: '42px', fontWeight: '800', opacity: deleteVerified ? 1 : 0.5, cursor: deleteVerified ? 'pointer' : 'not-allowed' }}
+              >
+                🗑️ Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

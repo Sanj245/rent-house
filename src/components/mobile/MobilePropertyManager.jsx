@@ -9,7 +9,8 @@ import {
   User, 
   FileText,
   Search,
-  DollarSign
+  DollarSign,
+  AlertTriangle
 } from 'lucide-react';
 
 const compressImage = (file, maxWidth, maxHeight, quality) => {
@@ -70,6 +71,10 @@ export default function MobilePropertyManager({
   
   // Selected Card Detail sheet drawer
   const [selectedProp, setSelectedProp] = useState(null);
+
+  // Stateful Delete Property Modal States
+  const [propertyToDelete, setPropertyToDelete] = useState(null);
+  const [deleteVerified, setDeleteVerified] = useState(false);
 
   // Form States
   const [name, setName] = useState('');
@@ -223,13 +228,10 @@ export default function MobilePropertyManager({
 
   const handleDelete = (id, propName, e) => {
     e.stopPropagation();
-    const doubleCheck = window.confirm(
-      `⚠️ Delete Property: Are you sure you want to remove "${propName}"?\n\nThis removes all linked agreement logs. This action cannot be undone.`
-    );
-    if (doubleCheck) {
-      deleteProperty(id);
-      setSelectedProp(null);
-    }
+    const prop = properties.find(p => p.id === id);
+    const tenant = tenants.find(t => t.propertyId === id);
+    setPropertyToDelete({ ...prop, tenantName: tenant ? tenant.name : null });
+    setDeleteVerified(false);
   };
 
   // Filter calculations
@@ -676,6 +678,90 @@ export default function MobilePropertyManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* STATEFUL DELETE DRAWER FOR MOBILE */}
+      {propertyToDelete && (
+        <div className="mobile-sheet-overlay" style={{ zIndex: 1250 }} onClick={() => setPropertyToDelete(null)}>
+          <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '85vh', overflowY: 'auto' }}>
+            <div className="mobile-sheet-handle" />
+            
+            <div className="mobile-sheet-header" style={{ borderBottom: '1px solid var(--mobile-border)', paddingBottom: '10px', marginBottom: '14px' }}>
+              <h3 className="mobile-sheet-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontSize: '1.15rem' }}>
+                ⚠️ Delete Property
+              </h3>
+              <button className="mobile-sheet-close" onClick={() => setPropertyToDelete(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <h4 style={{ fontSize: '0.92rem', fontWeight: '800' }}>
+                Are you sure you want to remove <span style={{ color: 'var(--mobile-secondary)' }}>"{propertyToDelete.name}"</span>?
+              </h4>
+              <p style={{ fontSize: '0.75rem', color: 'var(--mobile-muted)', marginTop: '2px' }}>
+                📍 {propertyToDelete.address}
+              </p>
+            </div>
+
+            {/* DANGER WARNING PANELS */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '10px', color: '#ef4444', fontSize: '0.74rem', lineHeight: '1.3' }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Permanent Loss:</strong> Deletes this property, its assets, and all linked payment ledger logs permanently.
+                </div>
+              </div>
+
+              {propertyToDelete.tenantName && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '10px', backgroundColor: 'rgba(212, 163, 115, 0.05)', border: '1px solid rgba(212, 163, 115, 0.15)', borderRadius: '10px', color: 'var(--mobile-secondary)', fontSize: '0.74rem', lineHeight: '1.3' }}>
+                  <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong>Occupant Warning:</strong> Currently occupied by <strong>{propertyToDelete.tenantName}</strong>. Deletion will vacate them immediately!
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* VERIFICATION CHECKBOX */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700', userSelect: 'none' }}>
+                <input 
+                  type="checkbox" 
+                  checked={deleteVerified} 
+                  onChange={(e) => setDeleteVerified(e.target.checked)}
+                  style={{ width: '16px', height: '16px', accentColor: '#ef4444' }}
+                />
+                I understand this action is permanent
+              </label>
+            </div>
+
+            {/* ACTIONS */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                type="button" 
+                className="mobile-btn" 
+                onClick={() => setPropertyToDelete(null)}
+                style={{ flex: 1 }}
+              >
+                Keep Property
+              </button>
+              <button 
+                type="button" 
+                className="mobile-btn mobile-btn-danger" 
+                onClick={() => {
+                  deleteProperty(propertyToDelete.id);
+                  setPropertyToDelete(null);
+                  setSelectedProp(null); // Close main detail drawer too
+                }}
+                disabled={!deleteVerified}
+                style={{ flex: 1, fontWeight: '800', opacity: deleteVerified ? 1 : 0.5 }}
+              >
+                🗑️ Confirm Delete
+              </button>
+            </div>
           </div>
         </div>
       )}
