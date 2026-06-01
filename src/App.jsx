@@ -102,10 +102,10 @@ export default function App() {
         return;
       }
 
-      const props       = data.properties  || [];
-      const rawTenants  = data.tenants     || [];
+      const props       = (data.properties  || []).filter(p => p && p.id);
+      const rawTenants  = (data.tenants     || []).filter(t => t && t.id);
       const ledg        = data.ledger      || {};
-      const past        = data.pastTenants || [];
+      const past        = (data.pastTenants || []).filter(pt => pt && pt.id);
       const { tenants: checked, updated } = checkTenantsRaise(rawTenants);
 
       setProperties(props);
@@ -627,6 +627,12 @@ export default function App() {
     saveToFirestore({ tenants: newTenants });
   };
 
+  const editTenant = (tenantId, updatedTenant) => {
+    const newTenants = stateRef.current.tenants.map((t) => t.id === tenantId ? { ...t, ...updatedTenant } : t);
+    setTenants(newTenants);
+    saveToFirestore({ tenants: newTenants });
+  };
+
   const handleExportData = () => {
     const dataStr  = JSON.stringify({ properties, tenants, ledger }, null, 2);
     const dataUri  = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
@@ -680,7 +686,7 @@ export default function App() {
         pastTenants={pastTenants}     setPastTenants={setPastTenants}
         notifications={notifications}
         addProperty={addProperty}     editProperty={editProperty}   deleteProperty={deleteProperty}
-        addTenant={addTenant}         removeTenant={removeTenant}
+        addTenant={addTenant}         removeTenant={removeTenant}   editTenant={editTenant}
         scheduleRentRaise={scheduleRentRaise}
         updatePaymentStatus={updatePaymentStatus}
         updateTenantNotes={updateTenantNotes}
@@ -802,7 +808,7 @@ export default function App() {
             <PropertyManager properties={properties} tenants={tenants} addProperty={addProperty} editProperty={editProperty} deleteProperty={deleteProperty} />
           )}
           {currentTab === 'tenants' && (
-            <TenantManager tenants={tenants} properties={properties} ledger={ledger} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} />
+            <TenantManager tenants={tenants} properties={properties} ledger={ledger} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} editTenant={editTenant} />
           )}
           {currentTab === 'ledger' && (
             <RentLedger tenants={tenants} properties={properties} ledger={ledger} updatePaymentStatus={updatePaymentStatus} updateTenantNotes={updateTenantNotes} />

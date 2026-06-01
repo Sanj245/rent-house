@@ -15,7 +15,8 @@ import {
   AlertTriangle,
   CheckCircle,
   DollarSign,
-  Check
+  Check,
+  Edit3
 } from 'lucide-react';
 import PdfInlinePreview from '../PdfInlinePreview';
 
@@ -79,7 +80,10 @@ export default function MobileTenantManager({
   openSheet,
   activeSheet,
   closeSheet,
-  isPortal = false
+  isPortal = false,
+  editTenant,
+  editingTenant,
+  setEditingTenant
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -168,12 +172,13 @@ export default function MobileTenantManager({
   });
   
   useEffect(() => {
+    if (activeSheet === 'edit-tenant') return;
     const vacant = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
     const isCurrentVacant = vacant.some(p => p.id === propertyId);
     if (!isCurrentVacant && vacant.length > 0) {
       setPropertyId(vacant[0].id);
     }
-  }, [properties, tenants, propertyId]);
+  }, [properties, tenants, propertyId, activeSheet]);
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -190,6 +195,37 @@ export default function MobileTenantManager({
   const [aadharFile, setAadharFile] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [scheduledRaisePercent, setScheduledRaisePercent] = useState('10');
+
+  useEffect(() => {
+    if (activeSheet === 'edit-tenant' && editingTenant) {
+      setPropertyId(editingTenant.propertyId);
+      setName(editingTenant.name);
+      setPhone(editingTenant.phone);
+      setAltPhone(editingTenant.altPhone || '');
+      setSecurityDeposit(editingTenant.securityDeposit.toString());
+      setRent(editingTenant.rent.toString());
+      setDescription(editingTenant.description || '');
+      setAgreementFile(editingTenant.agreementFile || null);
+      setAadharFile(editingTenant.aadharFile || null);
+      setPhoto(editingTenant.photo || null);
+      setScheduledRaisePercent(editingTenant.scheduledRaisePercent !== undefined ? editingTenant.scheduledRaisePercent.toString() : '10');
+      setMoveInDate(editingTenant.moveInDate || '');
+    } else if (activeSheet === 'add-tenant') {
+      const vacant = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
+      setPropertyId(vacant.length > 0 ? vacant[0].id : '');
+      setName('');
+      setPhone('');
+      setAltPhone('');
+      setSecurityDeposit('10000');
+      setRent('8000');
+      setDescription('');
+      setAgreementFile(null);
+      setAadharFile(null);
+      setPhoto(null);
+      setScheduledRaisePercent('10');
+      setMoveInDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [activeSheet, editingTenant, properties, tenants]);
 
   const [previewFile, setPreviewFile] = useState(null); // image/PDF preview object
 
@@ -345,13 +381,18 @@ export default function MobileTenantManager({
       photo,
       scheduledRaisePercent: Number(scheduledRaisePercent),
       scheduledRaiseEffectiveDate: calculateRentRaiseDate(moveInDate),
-      raiseApplied: false,
-      rentHistory: [
+      raiseApplied: activeSheet === 'edit-tenant' && editingTenant ? editingTenant.raiseApplied : false,
+      rentHistory: activeSheet === 'edit-tenant' && editingTenant ? (editingTenant.rentHistory || [{ date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }]) : [
         { date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }
       ]
     };
 
-    addTenant(tenantData);
+    if (activeSheet === 'edit-tenant' && editingTenant) {
+      editTenant(editingTenant.id, tenantData);
+      if (setEditingTenant) setEditingTenant(null);
+    } else {
+      addTenant(tenantData);
+    }
     closeSheet();
   };
 
@@ -529,9 +570,23 @@ export default function MobileTenantManager({
             
             <div className="mobile-sheet-header">
               <h3 className="mobile-sheet-title">👥 Agreement Dossier Sheet</h3>
-              <button className="mobile-sheet-close" onClick={() => setSelectedTenant(null)}>
-                <X size={18} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button 
+                  className="mobile-sheet-close" 
+                  onClick={() => {
+                    setEditingTenant(selectedTenant);
+                    openSheet('edit-tenant');
+                    setSelectedTenant(null);
+                  }}
+                  style={{ color: 'var(--mobile-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Edit Agreement Details"
+                >
+                  <Edit3 size={18} />
+                </button>
+                <button className="mobile-sheet-close" onClick={() => setSelectedTenant(null)}>
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -825,14 +880,16 @@ export default function MobileTenantManager({
         </div>
       )}
 
-      {/* ADD NEW TENANT AGREEMENT PORTAL DRAWER */}
-      {activeSheet === 'add-tenant' && (
+      {/* ADD/EDIT NEW TENANT AGREEMENT PORTAL DRAWER */}
+      {(activeSheet === 'add-tenant' || activeSheet === 'edit-tenant') && (
         <div className="mobile-sheet-overlay" onClick={closeSheet}>
           <div className="mobile-sheet-content" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-sheet-handle" />
             
             <div className="mobile-sheet-header">
-              <h3 className="mobile-sheet-title">👥 Add Tenant Agreement</h3>
+              <h3 className="mobile-sheet-title">
+                {activeSheet === 'edit-tenant' ? '👥 Edit Tenant Agreement' : '👥 Add Tenant Agreement'}
+              </h3>
               <button className="mobile-sheet-close" onClick={closeSheet}>
                 <X size={18} />
               </button>
@@ -847,10 +904,18 @@ export default function MobileTenantManager({
                   value={propertyId} 
                   onChange={(e) => setPropertyId(e.target.value)}
                   required
+                  disabled={activeSheet === 'edit-tenant'}
+                  style={{ opacity: activeSheet === 'edit-tenant' ? 0.7 : 1 }}
                 >
-                  {vacantProperties.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.address})</option>
-                  ))}
+                  {activeSheet === 'edit-tenant' && editingTenant ? (
+                    <option value={editingTenant.propertyId}>
+                      {getPropertyName(editingTenant.propertyId)}
+                    </option>
+                  ) : (
+                    vacantProperties.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.address})</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -1012,7 +1077,7 @@ export default function MobileTenantManager({
                   Cancel
                 </button>
                 <button type="submit" className="mobile-btn mobile-btn-primary" style={{ flex: 1 }}>
-                  Confirm Agreement
+                  {activeSheet === 'edit-tenant' ? 'Save Changes' : 'Confirm Agreement'}
                 </button>
               </div>
             </form>

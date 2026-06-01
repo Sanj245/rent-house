@@ -46,6 +46,7 @@ export default function MobileApp({
   deleteProperty,
   addTenant,
   removeTenant,
+  editTenant,
   scheduleRentRaise,
   updatePaymentStatus,
   updateTenantNotes,
@@ -60,12 +61,14 @@ export default function MobileApp({
   // Sheets Control
   const [activeSheet, setActiveSheet] = useState(null); // 'add-property', 'add-tenant', 'quick-pay'
   const [editingProp, setEditingProp] = useState(null);
+  const [editingTenant, setEditingTenant] = useState(null);
 
   const toggleFab = () => setFabOpen(!fabOpen);
   const closeFab = () => setFabOpen(false);
 
   const openSheet = (sheetName) => {
     if (sheetName === 'add-tenant') {
+      setEditingTenant(null);
       const vacantProperties = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
       if (vacantProperties.length === 0) {
         alert('⚠️ No Vacant Properties: Please register a vacant property first before adding a tenant agreement.');
@@ -207,6 +210,9 @@ export default function MobileApp({
             openSheet={openSheet}
             activeSheet={activeSheet}
             closeSheet={closeSheet}
+            editTenant={editTenant}
+            editingTenant={editingTenant}
+            setEditingTenant={setEditingTenant}
           />
         )}
 
@@ -519,7 +525,7 @@ export default function MobileApp({
         />
       )}
 
-      {activeSheet === 'add-tenant' && (
+      {(activeSheet === 'add-tenant' || activeSheet === 'edit-tenant') && (
         <MobileTenantManager
           tenants={tenants}
           properties={properties}
@@ -531,6 +537,9 @@ export default function MobileApp({
           activeSheet={activeSheet}
           closeSheet={closeSheet}
           isPortal={true}
+          editTenant={editTenant}
+          editingTenant={editingTenant}
+          setEditingTenant={setEditingTenant}
         />
       )}
 

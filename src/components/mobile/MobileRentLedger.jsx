@@ -70,12 +70,12 @@ export default function MobileRentLedger({
   const [paymentNotes, setPaymentNotes] = useState('');
 
   function getPropertyName(id) {
-    const p = properties.find(prop => prop.id === id);
+    const p = (properties || []).find(prop => prop.id === id);
     return p ? p.name : 'Unknown';
   }
 
   const getPropertyPaymentConfig = (propertyId) => {
-    const prop = properties.find(p => p.id === propertyId);
+    const prop = (properties || []).find(p => p.id === propertyId);
     if (!prop) return { isCash: true, account: 'Landlord' };
     return {
       isCash: prop.isCashOnly !== undefined ? prop.isCashOnly : true,
@@ -324,6 +324,30 @@ export default function MobileRentLedger({
     return { computedRent, isAvailable, payData, statusText, amountStr, dateStr, methodStr, receiverStr, notesStr, statusColor, statusBg, statusEmoji };
   };
 
+  const getPaymentSortOrder = (tenant) => {
+    const { statusText, isAvailable } = getTenantMonthInfo(tenant);
+    if (!isAvailable) return 4; // Prior to Tenancy
+    if (statusText === 'Paid') return 3;
+    if (statusText === 'Partial') return 2;
+    return 1; // Pending Due / Unpaid
+  };
+
+  const sortedTenants = [...(tenants || [])]
+    .filter(t => t && t.id)
+    .sort((a, b) => {
+      const orderA = getPaymentSortOrder(a);
+      const orderB = getPaymentSortOrder(b);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      const propA = (getPropertyName(a.propertyId) || '').toLowerCase();
+      const propB = (getPropertyName(b.propertyId) || '').toLowerCase();
+      if (propA !== propB) return propA.localeCompare(propB);
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
@@ -445,7 +469,7 @@ export default function MobileRentLedger({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {tenants.map(tenant => {
+          {sortedTenants.map(tenant => {
             const { computedRent, isAvailable, payData, statusText, amountStr, dateStr, methodStr, receiverStr, notesStr, statusColor, statusBg, statusEmoji } = getTenantMonthInfo(tenant);
             const isPaid    = statusText === 'Paid';
             const isPartial = statusText === 'Partial';

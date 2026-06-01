@@ -63,7 +63,7 @@ export default function RentLedger({
   const [paymentNotes, setPaymentNotes] = useState('');
 
   function getPropertyName(id) {
-    const p = properties.find(prop => prop.id === id);
+    const p = (properties || []).find(prop => prop.id === id);
     return p ? p.name : 'Unknown Property';
   }
 
@@ -331,6 +331,48 @@ export default function RentLedger({
   const [selMonth, selYear] = selectedTimelineKey.split('-');
   const displayActiveMonthName = `${monthsBase.find(m => m.key === selMonth)?.name} ${selYear}`;
 
+  const getPaymentSortOrder = (tenant) => {
+    const tenantPayments = ledger[tenant.id] || {};
+    const isAvailable = isMonthAvailable(tenant.moveInDate, selectedTimelineKey);
+    
+    if (!isAvailable) return 4; // prior to tenancy (show last)
+    
+    const [mKey, yStr] = selectedTimelineKey.split('-');
+    const payData = getPaymentData(tenantPayments, mKey, parseInt(yStr, 10));
+    
+    if (payData) {
+      if (typeof payData === 'string') {
+        if (payData === 'Paid') return 3; // Paid
+        if (payData === 'Unpaid') return 1; // Unpaid
+        return 2; // Partial/Other
+      } else {
+        if (payData.status === 'Paid') return 3; // Paid
+        if (payData.status === 'Partial') return 2; // Partial
+        if (payData.status === 'Unpaid') return 1; // Unpaid
+      }
+    }
+    
+    // No payData means it's unmarked/pending due, which is "not yet paid" (show first)
+    return 1;
+  };
+
+  const sortedTenants = [...(tenants || [])]
+    .filter(t => t && t.id)
+    .sort((a, b) => {
+      const orderA = getPaymentSortOrder(a);
+      const orderB = getPaymentSortOrder(b);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      // Secondary sort: alphabetical by property name, then tenant name
+      const propA = (getPropertyName(a.propertyId) || '').toLowerCase();
+      const propB = (getPropertyName(b.propertyId) || '').toLowerCase();
+      if (propA !== propB) return propA.localeCompare(propB);
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
   return (
     <div>
       {/* Page Header */}
@@ -527,7 +569,7 @@ export default function RentLedger({
                 </tr>
               </thead>
               <tbody>
-                {tenants.map(tenant => {
+                {sortedTenants.map(tenant => {
                   const tenantPayments = ledger[tenant.id] || {};
                   const isAvailable = isMonthAvailable(tenant.moveInDate, selectedTimelineKey);
                   

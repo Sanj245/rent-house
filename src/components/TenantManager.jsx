@@ -20,9 +20,11 @@ export default function TenantManager({
   ledger = {},
   addTenant, 
   removeTenant, 
-  updateTenantRent 
+  updateTenantRent,
+  editTenant
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTenant, setEditingTenant] = useState(null);
   
   // Rent Update Modal State
   const [isRentModalOpen, setIsRentModalOpen] = useState(false);
@@ -128,6 +130,7 @@ export default function TenantManager({
       alert('⚠️ No Vacant Properties: Please register a vacant property first before adding a tenant agreement.');
       return;
     }
+    setEditingTenant(null);
     setPropertyId(vacantProperties[0].id);
     setName('');
     setPhone('');
@@ -151,6 +154,24 @@ export default function TenantManager({
     const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
     setScheduledRaiseEffectiveDate(elevenMonthsLaterStr);
 
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (tenant) => {
+    setEditingTenant(tenant);
+    setPropertyId(tenant.propertyId);
+    setName(tenant.name);
+    setPhone(tenant.phone);
+    setAltPhone(tenant.altPhone || '');
+    setSecurityDeposit(tenant.securityDeposit.toString());
+    setRent(tenant.rent.toString());
+    setDescription(tenant.description || '');
+    setAgreementFile(tenant.agreementFile || null);
+    setAadharFile(tenant.aadharFile || null);
+    setPhoto(tenant.photo || null);
+    setScheduledRaisePercent(tenant.scheduledRaisePercent !== undefined ? tenant.scheduledRaisePercent.toString() : '10');
+    setMoveInDate(tenant.moveInDate || '');
+    setScheduledRaiseEffectiveDate(tenant.scheduledRaiseEffectiveDate || '');
     setIsModalOpen(true);
   };
 
@@ -267,13 +288,17 @@ export default function TenantManager({
       photo,
       scheduledRaisePercent: Number(scheduledRaisePercent),
       scheduledRaiseEffectiveDate: calculateRentRaiseDate(moveInDate),
-      raiseApplied: false,
-      rentHistory: [
+      raiseApplied: editingTenant ? editingTenant.raiseApplied : false,
+      rentHistory: editingTenant ? (editingTenant.rentHistory || [{ date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }]) : [
         { date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }
       ]
     };
 
-    addTenant(tenantData);
+    if (editingTenant) {
+      editTenant(editingTenant.id, tenantData);
+    } else {
+      addTenant(tenantData);
+    }
     setIsModalOpen(false);
   };
 
@@ -354,7 +379,7 @@ export default function TenantManager({
                 </div>
 
                 <div>
-                  <div className="item-card-header" style={{ marginTop: '4px', alignItems: 'center', gap: '12px' }}>
+                  <div className="item-card-header" style={{ marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       {tenant.photo ? (
                         <img 
@@ -396,6 +421,29 @@ export default function TenantManager({
                         <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Registered Tenant</div>
                       </div>
                     </div>
+
+                    <button 
+                      onClick={() => handleOpenEdit(tenant)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-muted)',
+                        padding: '6px',
+                        display: 'inline-flex',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-color)',
+                        backgroundColor: 'var(--bg-card)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+                      title="Edit Agreement Details"
+                    >
+                      <Edit3 size={16} />
+                    </button>
                   </div>
                   
                   <div style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--color-secondary)', marginTop: '2px', marginBottom: '14px' }}>
@@ -651,7 +699,9 @@ export default function TenantManager({
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">Register Tenant & Agreement</h3>
+              <h3 className="modal-title">
+                {editingTenant ? `Edit Agreement for ${editingTenant.name}` : 'Register Tenant & Agreement'}
+              </h3>
               <button 
                 onClick={() => setIsModalOpen(false)} 
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)' }}
@@ -669,10 +719,18 @@ export default function TenantManager({
                   value={propertyId} 
                   onChange={(e) => setPropertyId(e.target.value)}
                   required
+                  disabled={!!editingTenant}
+                  style={{ opacity: editingTenant ? 0.7 : 1, cursor: editingTenant ? 'not-allowed' : 'default' }}
                 >
-                  {vacantProperties.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.address})</option>
-                  ))}
+                  {editingTenant ? (
+                    <option value={editingTenant.propertyId}>
+                      {getPropertyName(editingTenant.propertyId)}
+                    </option>
+                  ) : (
+                    vacantProperties.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} ({p.address})</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -888,7 +946,7 @@ export default function TenantManager({
                   className="btn btn-primary"
                   style={{ flexGrow: 1 }}
                 >
-                  Register Agreement
+                  {editingTenant ? 'Save Agreement' : 'Register Agreement'}
                 </button>
               </div>
             </form>
