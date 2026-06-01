@@ -1,0 +1,16 @@
+{
+  "short_name": "RentArc",
+  "name": "RentArc Dossiers - Landlord Ledger Manager",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#1a2c22",
+  "theme_color": "#3d6a54",
+  "display": "standalone",
+  "orientation": "portrait"
+}
