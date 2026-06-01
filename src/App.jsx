@@ -294,8 +294,8 @@ export default function App() {
 
           triggerSystemNotification(
             `raise-${t.id}-${t.scheduledRaiseEffectiveDate}`,
-            `📈 Rent Increase Active!`,
-            `Rent for ${t.name} at ${getPropName(t.propertyId)} has automatically raised to ₹${raisedRent} starting today.`
+            `📈 Rent Raised: ${t.name}`,
+            `Rent at ${getPropName(t.propertyId)} automatically raised to ₹${raisedRent} today.`
           );
         }
       }
@@ -347,14 +347,14 @@ export default function App() {
             if (diffDays >= 10) {
               triggerSystemNotification(
                 `overdue-10-${t.id}-${timelineKey}`,
-                `🚨 Rent Overdue (10 Days)`,
-                `Rent for ${t.name} (${monthName} ${y}) is 10 days overdue. Due date was 10th ${monthsNamesList[dueMonthIdx]} ${dueYear}.`
+                `🚨 10d Overdue: ${t.name}`,
+                `Rent of ₹${t.rent} (${monthName} ${y}) is 10 days overdue.`
               );
             } else if (diffDays >= 5) {
               triggerSystemNotification(
                 `overdue-5-${t.id}-${timelineKey}`,
-                `⚠️ Rent Overdue (5 Days)`,
-                `Rent for ${t.name} (${monthName} ${y}) is 5 days overdue. Due date was 10th ${monthsNamesList[dueMonthIdx]} ${dueYear}.`
+                `⚠️ 5d Overdue: ${t.name}`,
+                `Rent of ₹${t.rent} (${monthName} ${y}) is 5 days overdue.`
               );
             }
           }
