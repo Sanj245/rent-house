@@ -203,12 +203,23 @@ export default function App() {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
           try {
-            new Notification(title, {
+            const options = {
               body: body,
               icon: '/favicon.ico',
               tag: id,
               requireInteraction: true // Keep notification pinned on desktop lock/home system trays
-            });
+            };
+
+            // Try Service Worker registration first (standard for mobile PWAs/browsers to show system alerts)
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then((registration) => {
+                registration.showNotification(title, options);
+              }).catch(() => {
+                new Notification(title, options);
+              });
+            } else {
+              new Notification(title, options);
+            }
             localStorage.setItem(storageKey, 'triggered');
           } catch (err) {
             console.error('Failed to trigger native notification:', err);
