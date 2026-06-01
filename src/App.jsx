@@ -205,7 +205,7 @@ export default function App() {
           try {
             const options = {
               body: body,
-              icon: '/favicon.ico',
+              icon: '/favicon.svg',
               tag: id,
               requireInteraction: true // Keep notification pinned on desktop lock/home system trays
             };
@@ -633,6 +633,16 @@ export default function App() {
   };
 
   const loadDemoData = async () => {
+    // 1. Request notification permission immediately inside user gesture to guarantee mobile system prompt triggers
+    if (typeof window !== 'undefined' && ('Notification' in window || Capacitor.isNativePlatform())) {
+      try {
+        console.log("Requesting notification permissions inside demo data loader gesture...");
+        await requestNotificationPermission();
+      } catch (err) {
+        console.error("Failed to request permission inside gesture:", err);
+      }
+    }
+
     const doubleCheck = window.confirm(
       "⚠️ Load Mock Demo Data?\n\nThis will populate your current house code with realistic mock properties, tenant agreements, payment ledgers, and past histories for comprehensive feature testing.\n\nAny existing data under this house code will be overwritten. Continue?"
     );
