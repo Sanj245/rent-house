@@ -34,7 +34,7 @@ export default function TenantManager({
   // Rent Update Modal State
   const [isRentModalOpen, setIsRentModalOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState(null);
-  const [newRaisePercent, setNewRaisePercent] = useState('10');
+  const [newRaisePercent, setNewRaisePercent] = useState('5');
   const [effectiveDate, setEffectiveDate] = useState('');
 
   // Stateful Vacate Modal States
@@ -123,7 +123,7 @@ export default function TenantManager({
   const [previewFile, setPreviewFile] = useState(null);
 
   // Scheduled Raise Form States
-  const [scheduledRaisePercent, setScheduledRaisePercent] = useState('10');
+  const [scheduledRaisePercent, setScheduledRaisePercent] = useState('5');
   const [scheduledRaiseEffectiveDate, setScheduledRaiseEffectiveDate] = useState('');
 
 
@@ -146,7 +146,7 @@ export default function TenantManager({
     setAgreementFile(null);
     setAadharFile(null);
     setPhoto(null);
-    setScheduledRaisePercent('10');
+    setScheduledRaisePercent('5');
 
     
     const today = new Date();
@@ -174,7 +174,7 @@ export default function TenantManager({
     setAgreementFile(tenant.agreementFile || null);
     setAadharFile(tenant.aadharFile || null);
     setPhoto(tenant.photo || null);
-    setScheduledRaisePercent(tenant.scheduledRaisePercent !== undefined ? tenant.scheduledRaisePercent.toString() : '10');
+    setScheduledRaisePercent(tenant.scheduledRaisePercent !== undefined ? tenant.scheduledRaisePercent.toString() : '5');
     setMoveInDate(tenant.moveInDate || '');
     setScheduledRaiseEffectiveDate(tenant.scheduledRaiseEffectiveDate || '');
     setIsModalOpen(true);
@@ -182,7 +182,7 @@ export default function TenantManager({
 
   const handleOpenRentUpdate = (tenant) => {
     setSelectedTenant(tenant);
-    setNewRaisePercent('10');
+    setNewRaisePercent('5');
     
     // Default reschedule raise effective date to 11 months from now
     const elevenMonthsLater = new Date();

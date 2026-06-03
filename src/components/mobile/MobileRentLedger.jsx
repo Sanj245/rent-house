@@ -72,7 +72,7 @@ export default function MobileRentLedger({
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [receivedBy, setReceivedBy] = useState('Landlord');
-  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('None');
 
   function getPropertyName(id) {
     const p = (properties || []).find(prop => prop.id === id);
@@ -163,7 +163,7 @@ export default function MobileRentLedger({
       datePaid: todayStr,
       paymentMethod: isCash ? 'Cash' : 'UPI',
       receivedBy: account,
-      notes: '⚡ Quick marked Paid'
+      notes: 'None'
     });
   };
 
@@ -192,19 +192,19 @@ export default function MobileRentLedger({
       if (typeof currentData === 'string') {
         setPaidAmt(currentData === 'Paid' ? computedRent.toString() : '');
         setRemainingAmt(''); setPaymentDate(todayStr); setPaymentMethod(isCash ? 'Cash' : 'UPI');
-        setReceivedBy(account); setPaymentNotes('');
+        setReceivedBy(account); setPaymentNotes('None');
       } else {
         setPaidAmt(currentData.paid ? currentData.paid.toString() : (currentData.status === 'Paid' ? computedRent.toString() : ''));
         setRemainingAmt(currentData.remaining ? currentData.remaining.toString() : '');
         setPaymentDate(currentData.datePaid || todayStr);
         setPaymentMethod(currentData.paymentMethod || (isCash ? 'Cash' : 'UPI'));
         setReceivedBy(currentData.receivedBy || account);
-        setPaymentNotes(currentData.notes || '');
+        setPaymentNotes(currentData.notes || 'None');
       }
     } else {
       setPaidAmt(''); setRemainingAmt('');
       setPaymentDate(todayStr); setPaymentMethod(isCash ? 'Cash' : 'UPI');
-      setReceivedBy(account); setPaymentNotes('');
+      setReceivedBy(account); setPaymentNotes('None');
     }
   };
 
@@ -216,11 +216,11 @@ export default function MobileRentLedger({
 
     let details;
     if (finalPaid >= finalRentDue) {
-      details = { status: 'Paid', rentDue: finalRentDue, paid: finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
+      details = { status: 'Paid', rentDue: finalRentDue, paid: finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || 'None' };
     } else if (finalPaid > 0 && finalPaid < finalRentDue) {
-      details = { status: 'Partial', rentDue: finalRentDue, paid: finalPaid, remaining: finalRentDue - finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
+      details = { status: 'Partial', rentDue: finalRentDue, paid: finalPaid, remaining: finalRentDue - finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || 'None' };
     } else {
-      details = { status: 'Unpaid', rentDue: finalRentDue, datePaid: '', paymentMethod: '—', receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
+      details = { status: 'Unpaid', rentDue: finalRentDue, datePaid: '', paymentMethod: '—', receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || 'None' };
     }
     updatePaymentStatus(editPaymentNode.tenantId, editPaymentNode.timelineKey, details);
     setEditPaymentNode(null);
@@ -630,20 +630,12 @@ export default function MobileRentLedger({
               </div>
 
               {(() => {
-                const rentDueNum = Number(customRentDue) || 0;
                 const paidAmtNum = Number(paidAmt) || 0;
-                const calculatedRemaining = Math.max(0, rentDueNum - paidAmtNum);
                 return (
                   <>
-                    <div className="mobile-form-row">
-                      <div className="mobile-form-group">
-                        <label className="mobile-form-label">Amount Paid (₹)</label>
-                        <input type="number" className="mobile-form-input" value={paidAmt} onChange={(e) => setPaidAmt(e.target.value)} min="0" />
-                      </div>
-                      <div className="mobile-form-group">
-                        <label className="mobile-form-label">Balance Remaining (₹)</label>
-                        <input type="text" className="mobile-form-input" value={calculatedRemaining > 0 ? formatCurrency(calculatedRemaining) : '0'} readOnly disabled />
-                      </div>
+                    <div className="mobile-form-group">
+                      <label className="mobile-form-label">Amount Paid (₹)</label>
+                      <input type="number" className="mobile-form-input" value={paidAmt} onChange={(e) => setPaidAmt(e.target.value)} min="0" />
                     </div>
 
                     <div className="mobile-form-row">

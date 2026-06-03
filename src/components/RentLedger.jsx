@@ -65,7 +65,7 @@ export default function RentLedger({
   const [paymentDate, setPaymentDate] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [receivedBy, setReceivedBy] = useState('Landlord');
-  const [paymentNotes, setPaymentNotes] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('None');
 
   function getPropertyName(id) {
     const p = (properties || []).find(prop => prop.id === id);
@@ -194,14 +194,14 @@ export default function RentLedger({
         setPaymentDate(todayStr);
         setPaymentMethod(isCash ? 'Cash' : 'UPI');
         setReceivedBy(account);
-        setPaymentNotes('');
+        setPaymentNotes('None');
       } else {
         setPaidAmt(currentData.paid ? currentData.paid.toString() : (currentData.status === 'Paid' ? computedRent.toString() : ''));
         setRemainingAmt(currentData.remaining ? currentData.remaining.toString() : '');
         setPaymentDate(currentData.datePaid || todayStr);
         setPaymentMethod(currentData.paymentMethod || (isCash ? 'Cash' : 'UPI'));
         setReceivedBy(currentData.receivedBy || account);
-        setPaymentNotes(currentData.notes || '');
+        setPaymentNotes(currentData.notes || 'None');
       }
     } else {
       setPaidAmt('');
@@ -209,7 +209,7 @@ export default function RentLedger({
       setPaymentDate(todayStr);
       setPaymentMethod(isCash ? 'Cash' : 'UPI');
       setReceivedBy(account);
-      setPaymentNotes('');
+      setPaymentNotes('None');
     }
   };
 
@@ -229,7 +229,7 @@ export default function RentLedger({
         datePaid: paymentDate || new Date().toISOString().split('T')[0],
         paymentMethod: paymentMethod,
         receivedBy: receivedBy.trim() || 'Landlord',
-        notes: paymentNotes || ''
+        notes: paymentNotes || 'None'
       };
     } else if (finalPaid > 0 && finalPaid < finalRentDue) {
       details = { 
@@ -240,7 +240,7 @@ export default function RentLedger({
         datePaid: paymentDate || new Date().toISOString().split('T')[0],
         paymentMethod: paymentMethod,
         receivedBy: receivedBy.trim() || 'Landlord',
-        notes: paymentNotes || ''
+        notes: paymentNotes || 'None'
       };
     } else {
       details = { 
@@ -249,7 +249,7 @@ export default function RentLedger({
         datePaid: '',
         paymentMethod: '—',
         receivedBy: receivedBy.trim() || 'Landlord',
-        notes: paymentNotes || ''
+        notes: paymentNotes || 'None'
       };
     }
 
@@ -270,7 +270,7 @@ export default function RentLedger({
       datePaid: todayStr,
       paymentMethod: isCash ? 'Cash' : 'UPI', // Default based on property config
       receivedBy: account, // Default to property account name or "Landlord"
-      notes: 'Quick logged as Paid'
+      notes: 'None'
     };
     updatePaymentStatus(tenant.id, timelineKey, details);
   };
@@ -745,32 +745,18 @@ export default function RentLedger({
               {(() => {
                 const rentDueNum = Number(customRentDue) || 0;
                 const paidAmtNum = Number(paidAmt) || 0;
-                const calculatedRemaining = Math.max(0, rentDueNum - paidAmtNum);
                 return (
                   <>
-                    <div className="form-row-2">
-                      <div className="form-group">
-                        <label className="form-label">Amount Paid (₹)</label>
-                        <input 
-                          type="number" 
-                          className="form-input"
-                          value={paidAmt}
-                          onChange={(e) => setPaidAmt(e.target.value)}
-                          placeholder="e.g. 5000"
-                          min="0"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label className="form-label">Remaining Balance Due (₹)</label>
-                        <input 
-                          type="text" 
-                          className="form-input"
-                          value={calculatedRemaining > 0 ? formatCurrency(calculatedRemaining) : '0'}
-                          readOnly
-                          disabled
-                        />
-                      </div>
+                    <div className="form-group">
+                      <label className="form-label">Amount Paid (₹)</label>
+                      <input 
+                        type="number" 
+                        className="form-input"
+                        value={paidAmt}
+                        onChange={(e) => setPaidAmt(e.target.value)}
+                        placeholder="e.g. 5000"
+                        min="0"
+                      />
                     </div>
 
                     <div className="form-row-2">

@@ -167,7 +167,7 @@ export default function MobileTenantManager({
   // Rent Raise Update drawer state
   const [isRaiseSheetOpen, setIsRaiseSheetOpen] = useState(false);
   const [targetTenant, setTargetTenant] = useState(null);
-  const [raisePercent, setRaisePercent] = useState('10');
+  const [raisePercent, setRaisePercent] = useState('5');
   const [raiseEffectiveDate, setRaiseEffectiveDate] = useState('');
 
   // Add Tenant Form States
@@ -199,7 +199,7 @@ export default function MobileTenantManager({
   const [agreementFile, setAgreementFile] = useState(null);
   const [aadharFile, setAadharFile] = useState(null);
   const [photo, setPhoto] = useState(null);
-  const [scheduledRaisePercent, setScheduledRaisePercent] = useState('10');
+  const [scheduledRaisePercent, setScheduledRaisePercent] = useState('5');
 
   useEffect(() => {
     if (activeSheet === 'edit-tenant' && editingTenant) {
@@ -213,7 +213,7 @@ export default function MobileTenantManager({
       setAgreementFile(editingTenant.agreementFile || null);
       setAadharFile(editingTenant.aadharFile || null);
       setPhoto(editingTenant.photo || null);
-      setScheduledRaisePercent(editingTenant.scheduledRaisePercent !== undefined ? editingTenant.scheduledRaisePercent.toString() : '10');
+      setScheduledRaisePercent(editingTenant.scheduledRaisePercent !== undefined ? editingTenant.scheduledRaisePercent.toString() : '5');
       setMoveInDate(editingTenant.moveInDate || '');
     } else if (activeSheet === 'add-tenant') {
       const vacant = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
@@ -227,7 +227,7 @@ export default function MobileTenantManager({
       setAgreementFile(null);
       setAadharFile(null);
       setPhoto(null);
-      setScheduledRaisePercent('10');
+      setScheduledRaisePercent('5');
       setMoveInDate(new Date().toISOString().split('T')[0]);
     }
   }, [activeSheet, editingTenant, properties, tenants]);
@@ -251,7 +251,7 @@ export default function MobileTenantManager({
     setAgreementFile(null);
     setAadharFile(null);
     setPhoto(null);
-    setScheduledRaisePercent('10');
+    setScheduledRaisePercent('5');
     
     const todayStr = new Date().toISOString().split('T')[0];
     setMoveInDate(todayStr);
@@ -262,7 +262,7 @@ export default function MobileTenantManager({
   const handleOpenRaiseUpdate = (tenant, e) => {
     e.stopPropagation(); // Stop opening main details sheet
     setTargetTenant(tenant);
-    setRaisePercent(tenant.scheduledRaisePercent?.toString() || '10');
+    setRaisePercent(tenant.scheduledRaisePercent?.toString() || '5');
     
     const elevenMonthsLater = new Date();
     elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
