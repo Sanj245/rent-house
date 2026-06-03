@@ -13,6 +13,11 @@ const formatDateToDDMMYYYY = (dateStr) => {
   return dateStr;
 };
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || isNaN(val)) return '0';
+  return Number(val).toLocaleString('en-IN');
+};
+
 export default function PropertyManager({ 
   properties, 
   tenants,
@@ -79,8 +84,8 @@ export default function PropertyManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert('⚠️ Image size too large:\n\nTo preserve local storage space, please upload appliance images smaller than 15.0 MB.');
+    if (file.size > 800 * 1024) {
+      alert('⚠️ Image size too large:\n\nTo prevent save failures and preserve database limits, please upload appliance images smaller than 800 KB.');
       e.target.value = null; // Clear input
       return;
     }
@@ -254,7 +259,7 @@ export default function PropertyManager({
                         <div>👤 <strong>Name:</strong> {tenant.name}</div>
                         <div>📞 <strong>Phone:</strong> {tenant.phone}</div>
                         <div>📅 <strong>Move-in Date:</strong> {formatDateToDDMMYYYY(tenant.moveInDate)}</div>
-                        <div>₹ <strong>Current Rent:</strong> ₹{tenant.rent}/mo</div>
+                        <div>₹ <strong>Current Rent:</strong> ₹{formatCurrency(tenant.rent)}/mo</div>
                         
                         {tenant.agreementFile && (
                           <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(16, 185, 129, 0.4)' }}>

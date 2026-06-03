@@ -23,6 +23,11 @@ const formatDateToDDMMYYYY = (dateStr) => {
   return dateStr;
 };
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || isNaN(val)) return '0';
+  return Number(val).toLocaleString('en-IN');
+};
+
 export default function MobileTenancyHistory({
   properties,
   tenants,
@@ -142,7 +147,7 @@ export default function MobileTenancyHistory({
         </div>
         <div class="stats">
           <div class="stat-box green"><div class="stat-label">Total Rent Collected</div><div class="stat-value">₹${financials.totalRevenue.toLocaleString('en-IN')}</div></div>
-          <div class="stat-box orange"><div class="stat-label">Current Monthly Rent</div><div class="stat-value orange">${activeTenant ? '₹' + activeTenant.rent + '/mo' : 'Vacant'}</div></div>
+          <div class="stat-box orange"><div class="stat-label">Current Monthly Rent</div><div class="stat-value orange">${activeTenant ? '₹' + Number(activeTenant.rent).toLocaleString('en-IN') + '/mo' : 'Vacant'}</div></div>
           <div class="stat-box grey"><div class="stat-label">Tenancy Cycles</div><div class="stat-value grey">${financials.totalTransactions} total</div></div>
         </div>
         ${activeTenant ? `
@@ -303,9 +308,9 @@ export default function MobileTenancyHistory({
                             <div>📅 Tenure: <strong>{formatDateToDDMMYYYY(past.moveInDate)}</strong> to <strong>{formatDateToDDMMYYYY(past.moveOutDate)}</strong></div>
                             
                             <div style={{ borderTop: '1px dashed var(--mobile-border)', marginTop: '6px', paddingTop: '6px', fontSize: '0.7rem' }}>
-                              <strong>🔐 Deposit:</strong> ₹{past.securityDeposit}
-                              {past.deductions > 0 ? ` | Deductions: ₹${past.deductions}` : ''}
-                              {' | '}<strong>Refund:</strong> <span style={{ color: 'var(--mobile-primary)', fontWeight: '700' }}>₹{past.refundAmount !== undefined ? past.refundAmount : (past.securityDeposit - (past.deductions || 0))}</span>
+                              <strong>🔐 Deposit:</strong> ₹{formatCurrency(past.securityDeposit)}
+                              {past.deductions > 0 ? ` | Deductions: ₹${formatCurrency(past.deductions)}` : ''}
+                              {' | '}<strong>Refund:</strong> <span style={{ color: 'var(--mobile-primary)', fontWeight: '700' }}>₹{formatCurrency(past.refundAmount !== undefined ? past.refundAmount : (past.securityDeposit - (past.deductions || 0)))}</span>
                             </div>
 
                             {past.vacateNotes && (

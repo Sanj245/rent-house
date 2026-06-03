@@ -14,6 +14,11 @@ const formatDateToDDMMYYYY = (dateStr) => {
   return dateStr;
 };
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || val === '—' || isNaN(Number(val))) return '—';
+  return Number(val).toLocaleString('en-IN');
+};
+
 export default function TenantManager({ 
   tenants, 
   properties, 
@@ -192,14 +197,8 @@ export default function TenantManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Document file size is too large:\n\nTo preserve local storage space, please upload signed agreements smaller than 15.0 Megabytes. For larger documents, we will record the file name, but recommend keeping the PDF on your computer!');
-      setAgreementFile({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        data: '' 
-      });
+    if (file.size > 800 * 1024) {
+      alert('❌ File too large:\n\nTo ensure database synchronization, please upload files smaller than 800 KB (e.g., a compressed PDF or image).');
       return;
     }
 
@@ -219,14 +218,8 @@ export default function TenantManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Aadhar file size is too large:\n\nTo preserve local storage space, please upload documents smaller than 15.0 Megabytes. For larger files, we will save the file name, but recommend reducing the size for complete local backup.');
-      setAadharFile({
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        data: '' 
-      });
+    if (file.size > 800 * 1024) {
+      alert('❌ File too large:\n\nTo ensure database synchronization, please upload files smaller than 800 KB.');
       return;
     }
 
@@ -246,8 +239,8 @@ export default function TenantManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15.0 * 1024 * 1024) {
-      alert('⚠️ Photo file size is too large:\n\nTo preserve local storage space, please upload photos smaller than 15.0 Megabytes.');
+    if (file.size > 800 * 1024) {
+      alert('❌ Photo file too large:\n\nTo ensure database synchronization, please upload photos smaller than 800 KB.');
       return;
     }
 
@@ -339,7 +332,7 @@ export default function TenantManager({
     <div>
       <div className="notebook-header">
         <div>
-          <h2 className="section-title">Tenants Agreements Registry</h2>
+          <h2 className="section-title">Tenant Registry</h2>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', marginTop: '4px' }}>
             Manage active tenants, security deposits, and schedule automatic rent increases.
           </p>
@@ -462,13 +455,13 @@ export default function TenantManager({
                     <div className="detail-row">
                       <span className="label">💰 Monthly Rent</span>
                       <span className="value" style={{ color: 'var(--color-primary)', fontSize: '1.15rem', fontWeight: '800' }}>
-                        ₹{tenant.rent}/mo
+                        ₹{formatCurrency(tenant.rent)}/mo
                       </span>
                     </div>
                     <div className="detail-row">
                       <span className="label">🔐 Security Deposit</span>
                       <span className="value" style={{ color: 'var(--color-purple)', fontWeight: '700' }}>
-                        ₹{tenant.securityDeposit}
+                        ₹{formatCurrency(tenant.securityDeposit)}
                       </span>
                     </div>
                     <div className="detail-row">
@@ -644,7 +637,7 @@ export default function TenantManager({
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-main)', marginBottom: '8px' }}>
                         Automatic <strong>{tenant.scheduledRaisePercent}%</strong> Rent Increase set for <strong>{formatDateToDDMMYYYY(tenant.scheduledRaiseEffectiveDate)}</strong>.
                         <br />
-                        Rent will raise to <strong>₹{getRaisePreview(tenant.rent, tenant.scheduledRaisePercent).newRent}</strong>.
+                        Rent will raise to <strong>₹{formatCurrency(getRaisePreview(tenant.rent, tenant.scheduledRaisePercent).newRent)}</strong>.
                       </div>
                     )}
 
@@ -700,7 +693,7 @@ export default function TenantManager({
           <div className="modal-content">
             <div className="modal-header">
               <h3 className="modal-title">
-                {editingTenant ? `Edit Agreement for ${editingTenant.name}` : 'Register Tenant & Agreement'}
+                {editingTenant ? `Edit Tenant Details for ${editingTenant.name}` : 'Register Tenant'}
               </h3>
               <button 
                 onClick={() => setIsModalOpen(false)} 
@@ -836,12 +829,12 @@ export default function TenantManager({
 
               {/* 5. Custom Description Text Area */}
               <div className="form-group">
-                <label className="form-label">📝 Agreement Description / Notes</label>
+                <label className="form-label">📝 Tenant Notes / Description</label>
                 <textarea 
                   className="form-input" 
                   value={description} 
                   onChange={(e) => setDescription(e.target.value)} 
-                  placeholder="Enter a description, special terms, or any notes you want to save for this agreement..."
+                  placeholder="Enter notes, special terms, or any details you want to save for this tenant..."
                   rows={3}
                   style={{ resize: 'vertical' }}
                 />
@@ -924,9 +917,9 @@ export default function TenantManager({
                   }}>
                     Future Proj: rent raises to{' '}
                     <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>
-                      ₹{getRaisePreview(rent, scheduledRaisePercent).newRent}
+                      ₹{formatCurrency(getRaisePreview(rent, scheduledRaisePercent).newRent)}
                     </span>{' '}
-                    (Increase of +₹{getRaisePreview(rent, scheduledRaisePercent).raise} after 11 months)
+                    (Increase of +₹{formatCurrency(getRaisePreview(rent, scheduledRaisePercent).raise)} after 11 months)
                   </div>
                 )}
               </div>
@@ -946,7 +939,7 @@ export default function TenantManager({
                   className="btn btn-primary"
                   style={{ flexGrow: 1 }}
                 >
-                  {editingTenant ? 'Save Agreement' : 'Register Agreement'}
+                  {editingTenant ? 'Save Tenant Details' : 'Register Tenant'}
                 </button>
               </div>
             </form>
@@ -972,7 +965,7 @@ export default function TenantManager({
               <div className="form-group">
                 <label className="form-label">Current Monthly Rent</label>
                 <div style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-muted)' }}>
-                  ₹{selectedTenant.rent} / month
+                  ₹{formatCurrency(selectedTenant.rent)} / month
                 </div>
               </div>
 
@@ -1010,9 +1003,9 @@ export default function TenantManager({
                 }}>
                   Projection: Rent becomes{' '}
                   <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>
-                    ₹{getRaisePreview(selectedTenant.rent, newRaisePercent).newRent}
+                    ₹{formatCurrency(getRaisePreview(selectedTenant.rent, newRaisePercent).newRent)}
                   </span>{' '}
-                  (+₹{getRaisePreview(selectedTenant.rent, newRaisePercent).raise})
+                  (+₹{formatCurrency(getRaisePreview(selectedTenant.rent, newRaisePercent).raise)})
                 </div>
               )}
 
@@ -1091,7 +1084,7 @@ export default function TenantManager({
                         <div key={index} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 8px', borderBottom: index === outstanding.length - 1 ? 'none' : '1px solid var(--border-color)', fontSize: '0.84rem' }}>
                           <span style={{ fontWeight: '700' }}>📅 {d.monthName} {d.year}</span>
                           <span style={{ color: '#ef4444', fontWeight: '700' }}>
-                            {d.status === 'Partial' ? `Partial (Paid ₹${d.paidAmount} / Due ₹${d.rentDue})` : `Unpaid (₹${d.rentDue})`}
+                            {d.status === 'Partial' ? `Partial (Paid ₹${formatCurrency(d.paidAmount)} / Due ₹${formatCurrency(d.rentDue)})` : `Unpaid (₹${formatCurrency(d.rentDue)})`}
                           </span>
                         </div>
                       ))}
@@ -1110,7 +1103,7 @@ export default function TenantManager({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '14px' }}>
                 <div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: '600' }}>Initial Deposit Received</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-purple)', marginTop: '2px' }}>₹{tenantToVacate.securityDeposit}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--color-purple)', marginTop: '2px' }}>₹{formatCurrency(tenantToVacate.securityDeposit)}</div>
                 </div>
                 <div>
                   <label className="form-label" style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Deductions Amount (₹)</label>
@@ -1140,7 +1133,7 @@ export default function TenantManager({
               <div style={{ borderTop: '1px dashed var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontWeight: '700', fontSize: '0.9rem' }}>Net Refund to Tenant:</div>
                 <div style={{ fontSize: '1.35rem', fontWeight: '900', color: 'var(--color-primary)' }}>
-                  ₹{Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions))}
+                  ₹{formatCurrency(Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions)))}
                 </div>
               </div>
             </div>
@@ -1188,7 +1181,7 @@ export default function TenantManager({
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '12px', backgroundColor: 'rgba(239, 68, 68, 0.06)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.8rem', lineHeight: '1.4', marginBottom: '24px' }}>
               <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
-                <strong>Warning:</strong> Vacating this property ends the agreement cycle permanently, frees up the home to "Vacant", and archives these checkout details into your historical logs. This action cannot be undone.
+                <strong>Warning:</strong> Vacating this property ends the tenant cycle permanently, frees up the home to "Vacant", and archives these checkout details into your historical logs. This action cannot be undone.
               </div>
             </div>
 

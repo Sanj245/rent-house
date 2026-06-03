@@ -36,6 +36,7 @@ export default function App() {
 
   // Always-current ref — avoids stale closures in action functions
   const stateRef = useRef({ properties: [], tenants: [], ledger: {}, pastTenants: [] });
+  const lastSyncedDataRef = useRef({ properties: [], tenants: [], ledger: {}, pastTenants: [] });
   useEffect(() => {
     stateRef.current = { properties, tenants, ledger, pastTenants };
   }, [properties, tenants, ledger, pastTenants]);
@@ -98,6 +99,7 @@ export default function App() {
         setLedger(initial.ledger);
         setPastTenants(initial.pastTenants);
         stateRef.current = initial;
+        lastSyncedDataRef.current = initial;
         if (firstLoad) { setLoading(false); firstLoad = false; }
         return;
       }
@@ -113,6 +115,7 @@ export default function App() {
       setLedger(ledg);
       setPastTenants(past);
       stateRef.current = { properties: props, tenants: checked, ledger: ledg, pastTenants: past };
+      lastSyncedDataRef.current = { properties: props, tenants: checked, ledger: ledg, pastTenants: past };
 
       // Save back only if raises were auto-applied
       if (updated) {
@@ -138,9 +141,23 @@ export default function App() {
     try {
       await saveHouseData(code, data);
       setSyncStatus('live');
+      lastSyncedDataRef.current = data;
     } catch (err) {
       console.error('Firestore save error:', err);
       setSyncStatus('offline');
+      let errorMsg = err.message || String(err);
+      let detail = "";
+      if (errorMsg.toLowerCase().includes("large") || errorMsg.toLowerCase().includes("size") || errorMsg.toLowerCase().includes("exceed") || errorMsg.toLowerCase().includes("resource-exhausted")) {
+        detail = "\n\nThis usually happens if you attached a large image or PDF document. Please try using a smaller file (under 500KB) to stay within database limits.";
+      }
+      alert(`⚠️ Cloud Save Failed!\n\nYour changes could not be saved to the database. Error: ${errorMsg}${detail}`);
+      if (lastSyncedDataRef.current) {
+        setProperties(lastSyncedDataRef.current.properties);
+        setTenants(lastSyncedDataRef.current.tenants);
+        setLedger(lastSyncedDataRef.current.ledger);
+        setPastTenants(lastSyncedDataRef.current.pastTenants);
+        stateRef.current = { ...lastSyncedDataRef.current };
+      }
     }
   };
   // ─── Native / Web System Notification Engine ─────────────────────────────
@@ -275,84 +292,83 @@ export default function App() {
     const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-    tenants.forEach((t) => {
-      // 1. Rent Increase Notification (On first day of the increase month)
-      if (t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
-        const raiseDate = new Date(t.scheduledRaiseEffectiveDate);
-        if (today >= raiseDate) {
-          const baseRent = t.rentHistory && t.rentHistory[0] ? Number(t.rentHistory[0].amount) : Number(t.rent);
-          const raisePercent = Number(t.scheduledRaisePercent || 10);
-          const raisedRent = baseRent + Math.round((baseRent * raisePercent) / 100);
+    const startYear = 2020;
+    const currentYear = today.getFullYear();
+    const currentMonthIndex = today.getMonth();
 
-          triggerSystemNotification(
-            `raise-${t.id}-${t.scheduledRaiseEffectiveDate}`,
-            `📈 Rent Increased | ${t.name}`,
-            `🏠 Property: ${getPropName(t.propertyId)}\n💰 New Rent: ₹${raisedRent}/month\n⚡ Auto-applied starting today.`
-          );
+    const m = currentMonthIndex;
+    const y = currentYear;
+    const monthKey = monthsKeysList[m];
+    const monthName = monthsNamesList[m];
+    const timelineKey = `${monthKey}-${y}`;
+
+    // 1. Rent Increase Notification (On first day of the increase month)
+    const firstOfDay = new Date(y, m, 1);
+    if (today >= firstOfDay) {
+      const raisedTenantsForMonth = [];
+      tenants.forEach((t) => {
+        if (t.scheduledRaiseEffectiveDate) {
+          const parts = t.scheduledRaiseEffectiveDate.split('-');
+          const raiseYear = parseInt(parts[0], 10);
+          const raiseMonth = parseInt(parts[1], 10);
+          if (raiseYear === y && raiseMonth - 1 === m) {
+            raisedTenantsForMonth.push(t.name);
+          }
         }
+      });
+
+      if (raisedTenantsForMonth.length > 0) {
+        const msg = raisedTenantsForMonth.length === 1
+          ? `${raisedTenantsForMonth[0]}'s rent has been increased for this month`
+          : `${raisedTenantsForMonth.join(', ')}'s rents have been increased for this month`;
+
+        triggerSystemNotification(
+          `raise-group-${timelineKey}`,
+          `📈 Rent Increase | ${monthName} ${y}`,
+          msg
+        );
       }
+    }
 
-      // 2. Overdue Notifications (5 and 10 days after the due date)
-      if (t.moveInDate) {
-        const parts = t.moveInDate.split('-');
-        const moveInYear = parseInt(parts[0], 10);
-        const moveInMonth = parseInt(parts[1], 10);
-
-        const startAbsolute = (moveInYear - 2020) * 12 + (moveInMonth - 1);
-        const currentAbsolute = (today.getFullYear() - 2020) * 12 + today.getMonth();
+    // 2. Unpaid Rent Notification (if unpaid after 10 days of the month have passed)
+    const eleventhOfDay = new Date(y, m, 11);
+    if (today >= eleventhOfDay) {
+      const unpaidTenantsForMonth = [];
+      tenants.forEach((t) => {
+        if (t.moveInDate) {
+          const parts = t.moveInDate.split('-');
+          const moveInYear = parseInt(parts[0], 10);
+          const moveInMonth = parseInt(parts[1], 10);
+          const moveInAbs = (moveInYear - startYear) * 12 + (moveInMonth - 1);
+          const currentAbs = (y - startYear) * 12 + m;
+          if (moveInAbs > currentAbs) return;
+        }
 
         const tenantPayments = ledger[t.id] || {};
+        const payData = tenantPayments[timelineKey] !== undefined
+          ? tenantPayments[timelineKey]
+          : (y === 2026 ? tenantPayments[monthKey] : undefined);
 
-        for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
-          const y = 2020 + Math.floor(abs / 12);
-          const m = abs % 12;
-          const monthKey = monthsKeysList[m];
-          const monthName = monthsNamesList[m];
-          const timelineKey = `${monthKey}-${y}`;
-
-          // Due date is 10th of the next month
-          let dueMonthIdx = m + 1;
-          let dueYear = y;
-          if (dueMonthIdx > 11) {
-            dueMonthIdx = 0;
-            dueYear += 1;
-          }
-          const dueDate = new Date(dueYear, dueMonthIdx, 10);
-
-          // Check if rent is unpaid/unmarked
-          const payData = tenantPayments[timelineKey] !== undefined
-            ? tenantPayments[timelineKey]
-            : (y === 2026 ? tenantPayments[monthKey] : undefined);
-
-          let isOverdue = !payData;
-          if (payData) {
-            isOverdue = typeof payData === 'string'
-              ? payData !== 'Paid'
-              : payData.status !== 'Paid';
-          }
-
-          if (isOverdue) {
-            // Calculate delay in days
-            const diffTime = today - dueDate;
-            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-            if (diffDays >= 10) {
-              triggerSystemNotification(
-                `overdue-10-${t.id}-${timelineKey}`,
-                `🚨 10d Overdue | ${t.name}`,
-                `🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Status: 10 Days Overdue`
-              );
-            } else if (diffDays >= 5) {
-              triggerSystemNotification(
-                `overdue-5-${t.id}-${timelineKey}`,
-                `⚠️ 5d Overdue | ${t.name}`,
-                `🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Status: 5 Days Overdue`
-              );
-            }
-          }
+        let isUnpaid = !payData;
+        if (payData) {
+          isUnpaid = typeof payData === 'string'
+            ? payData !== 'Paid'
+            : payData.status !== 'Paid';
         }
+
+        if (isUnpaid) {
+          unpaidTenantsForMonth.push(t.name);
+        }
+      });
+
+      if (unpaidTenantsForMonth.length > 0) {
+        triggerSystemNotification(
+          `unpaid-group-${timelineKey}`,
+          `🚨 Unpaid Rent | ${monthName} ${y}`,
+          `tenants not paid: ${unpaidTenantsForMonth.join(', ')}`
+        );
       }
-    });
+    }
   }, [tenants, ledger, properties]);
   // ─── Navigation ───────────────────────────────────────────────────────────
   const [currentTab, setCurrentTab]           = useState('ledger');
@@ -363,114 +379,106 @@ export default function App() {
     const list      = [];
     const today     = new Date();
     const todayStr  = today.toISOString().split('T')[0];
-    const monthsKeys = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    const startYear = 2020;
+    const currentYear = today.getFullYear();
     const currentMonthIndex = today.getMonth();
-    const currentMonthKey   = monthsKeys[currentMonthIndex];
-    const currentYear       = today.getFullYear();
 
-    tenants.forEach((t) => {
-      if (t.scheduledRaiseEffectiveDate && !t.raiseApplied) {
-        const raiseDate = new Date(t.scheduledRaiseEffectiveDate);
-        const diffDays  = Math.ceil((raiseDate - today) / (1000 * 60 * 60 * 24));
-        if (diffDays <= 30 && diffDays >= 0) {
-          const raiseAmt    = Math.round((Number(t.rent) * Number(t.scheduledRaisePercent)) / 100);
-          const previewRent = Number(t.rent) + raiseAmt;
-          list.push({
-            id: `upcoming-raise-${t.id}`,
-            title: '📈 Rent Increase Scheduled',
-            message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 New Rent: ₹${previewRent} (+${t.scheduledRaisePercent}%)\n📅 Effective: ${formatDateToDDMMYYYY(t.scheduledRaiseEffectiveDate)} (${diffDays} days left)`,
-            type: 'upcoming-raise',
-            date: t.scheduledRaiseEffectiveDate
-          });
+    const startAbsolute = 0;
+    const currentAbsolute = (currentYear - startYear) * 12 + currentMonthIndex;
+
+    // 1. Grouped Unpaid Rent Alerts by Month (after 10 days of the month have passed)
+    for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
+      const y = startYear + Math.floor(abs / 12);
+      const m = abs % 12;
+      const monthKey = monthsKeysList[m];
+      const monthName = monthsNamesList[m];
+      const timelineKey = `${monthKey}-${y}`;
+
+      const eleventhOfDay = new Date(y, m, 11);
+      if (today < eleventhOfDay) continue;
+
+      const unpaidTenantsForMonth = [];
+      tenants.forEach((t) => {
+        if (t.moveInDate) {
+          const parts = t.moveInDate.split('-');
+          const moveInYear = parseInt(parts[0], 10);
+          const moveInMonth = parseInt(parts[1], 10);
+          const moveInAbs = (moveInYear - startYear) * 12 + (moveInMonth - 1);
+          if (moveInAbs > abs) return;
         }
-      }
-      if (t.raiseApplied && t.rentHistory) {
-        const latestRaise = t.rentHistory.find((h) => h.reason && h.reason.includes('Raise Applied'));
-        if (latestRaise) {
-          const diffDays = Math.ceil((today - new Date(latestRaise.date)) / (1000 * 60 * 60 * 24));
-          if (diffDays <= 30 && diffDays >= 0) {
-            list.push({
-              id: `recent-raise-${t.id}`,
-              title: '🎉 Rent Increase Applied',
-              message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 Current Rent: ₹${t.rent}\n📅 Applied: ${formatDateToDDMMYYYY(latestRaise.date)} (${diffDays} days ago)`,
-              type: 'recent-raise',
-              date: latestRaise.date
-            });
-          }
+
+        const tenantPayments = ledger[t.id] || {};
+        const payData = tenantPayments[timelineKey] !== undefined
+          ? tenantPayments[timelineKey]
+          : (y === 2026 ? tenantPayments[monthKey] : undefined);
+
+        let isUnpaid = !payData;
+        if (payData) {
+          isUnpaid = typeof payData === 'string'
+            ? payData !== 'Paid'
+            : payData.status !== 'Paid';
         }
-      }
-      const tenantPayments = ledger[t.id] || {};
 
-      if (t.moveInDate) {
-        const parts = t.moveInDate.split('-');
-        const moveInYear = parseInt(parts[0], 10);
-        const moveInMonth = parseInt(parts[1], 10); // 1-indexed
-
-        const monthsKeysList = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        const monthsNamesList = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-        const startAbsolute = (moveInYear - 2020) * 12 + (moveInMonth - 1);
-        const currentAbsolute = (currentYear - 2020) * 12 + currentMonthIndex;
-
-        for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
-          const y = 2020 + Math.floor(abs / 12);
-          const m = abs % 12;
-          const monthKey = monthsKeysList[m];
-          const monthName = monthsNamesList[m];
-          const timelineKey = `${monthKey}-${y}`;
-
-          // Due date is 10th of the next month
-          let dueMonthIdx = m + 1;
-          let dueYear = y;
-          if (dueMonthIdx > 11) {
-            dueMonthIdx = 0;
-            dueYear += 1;
-          }
-          const dueDate = new Date(dueYear, dueMonthIdx, 10);
-
-          // Only alert if today is on or after the due date (10th of next month)
-          if (today >= dueDate) {
-            const payData = tenantPayments[timelineKey] !== undefined
-              ? tenantPayments[timelineKey]
-              : (y === 2026 ? tenantPayments[monthKey] : undefined);
-
-            let isUnmarked = !payData;
-            if (payData) {
-              isUnmarked = typeof payData === 'string'
-                ? payData !== 'Paid' && payData !== 'Unpaid' && payData !== 'Partial'
-                : payData.status !== 'Paid' && payData.status !== 'Partial';
-            }
-
-            if (isUnmarked) {
-              const formattedDueDate = `10th ${monthsNamesList[dueMonthIdx]} ${dueYear}`;
-              list.push({
-                id: `due-${t.id}-${timelineKey}`,
-                title: '💰 Rent Overdue',
-                message: `👤 Tenant: ${t.name}\n🏠 Property: ${getPropName(t.propertyId)}\n💰 Rent Due: ₹${t.rent}\n📅 Rent Period: ${monthName} ${y}\n⚠️ Due Date: ${formattedDueDate}`,
-                type: 'due',
-                date: todayStr
-              });
-            }
-          }
+        if (isUnpaid) {
+          unpaidTenantsForMonth.push(t.name);
         }
-      }
-    });
+      });
 
-    // Disable repair notifications per user request
-    /*
-    properties.forEach((p) => {
-      if (p.items) {
-        Object.entries(p.items).forEach(([item, condition]) => {
-          if (condition === 'Needs Repair') {
-            list.push({ id: `repair-${p.id}-${item}`, title: '🛠️ Repair Needed', message: `"${item}" at ${p.name} needs repair.`, type: 'repair', date: todayStr });
-          }
+      if (unpaidTenantsForMonth.length > 0) {
+        list.push({
+          id: `unpaid-group-${timelineKey}`,
+          title: `🚨 Unpaid Rent | ${monthName} ${y}`,
+          message: `tenants not paid: ${unpaidTenantsForMonth.join(', ')}`,
+          type: 'due',
+          date: `${y}-${String(m + 1).padStart(2, '0')}-11`
         });
       }
-    });
-    */
+    }
+
+    // 2. Grouped Rent Increase Alerts by Month (On/after 1st of month)
+    for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
+      const y = startYear + Math.floor(abs / 12);
+      const m = abs % 12;
+      const monthKey = monthsKeysList[m];
+      const monthName = monthsNamesList[m];
+      const timelineKey = `${monthKey}-${y}`;
+
+      const firstOfDay = new Date(y, m, 1);
+      if (today < firstOfDay) continue;
+
+      const raisedTenantsForMonth = [];
+      tenants.forEach((t) => {
+        if (t.scheduledRaiseEffectiveDate) {
+          const parts = t.scheduledRaiseEffectiveDate.split('-');
+          const raiseYear = parseInt(parts[0], 10);
+          const raiseMonth = parseInt(parts[1], 10);
+          if (raiseYear === y && raiseMonth - 1 === m) {
+            raisedTenantsForMonth.push(t.name);
+          }
+        }
+      });
+
+      if (raisedTenantsForMonth.length > 0) {
+        const msg = raisedTenantsForMonth.length === 1
+          ? `${raisedTenantsForMonth[0]}'s rent has been increased for this month`
+          : `${raisedTenantsForMonth.join(', ')}'s rents have been increased for this month`;
+
+        list.push({
+          id: `raise-group-${timelineKey}`,
+          title: `📈 Rent Increase | ${monthName} ${y}`,
+          message: msg,
+          type: 'upcoming-raise',
+          date: `${y}-${String(m + 1).padStart(2, '0')}-01`
+        });
+      }
+    }
 
     return list;
   };
+
 
   const notifications = getNotifications();
 
@@ -480,12 +488,14 @@ export default function App() {
     const newProperties = [...stateRef.current.properties, { ...newProp, id: propId }];
     setProperties(newProperties);
     saveToFirestore({ properties: newProperties });
+    setCurrentTab('properties');
   };
 
   const editProperty = (id, updatedProp) => {
     const newProperties = stateRef.current.properties.map((p) => p.id === id ? { ...p, ...updatedProp } : p);
     setProperties(newProperties);
     saveToFirestore({ properties: newProperties });
+    setCurrentTab('properties');
   };
 
   const deleteProperty = (id) => {
@@ -525,6 +535,7 @@ export default function App() {
     setLedger(newLedger);
     setPastTenants(newPastTenants);
     saveToFirestore({ properties: newProperties, tenants: newTenants, ledger: newLedger, pastTenants: newPastTenants });
+    setCurrentTab('properties');
   };
 
   const addTenant = (newTenant) => {
@@ -547,6 +558,7 @@ export default function App() {
     setProperties(newProperties);
     setLedger(newLedger);
     saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger });
+    setCurrentTab('tenants');
   };
 
   const removeTenant = (tenantId, propertyId, deductions = 0, refundAmount = null, vacateNotes = '') => {
@@ -590,6 +602,7 @@ export default function App() {
     setLedger(newLedger);
     setPastTenants(newPastTenants);
     saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger, pastTenants: newPastTenants });
+    setCurrentTab('tenants');
   };
 
   const scheduleRentRaise = (tenantId, percent, effectiveDate) => {
@@ -610,27 +623,37 @@ export default function App() {
     });
     setTenants(newTenants);
     saveToFirestore({ tenants: newTenants });
+    setCurrentTab('tenants');
   };
 
   const updatePaymentStatus = (tenantId, monthKey, statusDetails) => {
+    const tenantLedger = { ...(stateRef.current.ledger[tenantId] || {}) };
+    if (statusDetails === undefined || statusDetails === null) {
+      delete tenantLedger[monthKey];
+    } else {
+      tenantLedger[monthKey] = statusDetails;
+    }
     const newLedger = {
       ...stateRef.current.ledger,
-      [tenantId]: { ...(stateRef.current.ledger[tenantId] || {}), [monthKey]: statusDetails },
+      [tenantId]: tenantLedger,
     };
     setLedger(newLedger);
     saveToFirestore({ ledger: newLedger });
+    setCurrentTab('ledger');
   };
 
   const updateTenantNotes = (tenantId, notes) => {
     const newTenants = stateRef.current.tenants.map((t) => t.id === tenantId ? { ...t, notes } : t);
     setTenants(newTenants);
     saveToFirestore({ tenants: newTenants });
+    setCurrentTab('tenants');
   };
 
   const editTenant = (tenantId, updatedTenant) => {
     const newTenants = stateRef.current.tenants.map((t) => t.id === tenantId ? { ...t, ...updatedTenant } : t);
     setTenants(newTenants);
     saveToFirestore({ tenants: newTenants });
+    setCurrentTab('tenants');
   };
 
   const handleExportData = () => {
@@ -680,6 +703,8 @@ export default function App() {
   if (isMobile) {
     return (
       <MobileApp
+        activeTab={currentTab}
+        setActiveTab={setCurrentTab}
         properties={properties}       setProperties={setProperties}
         tenants={tenants}             setTenants={setTenants}
         ledger={ledger}               setLedger={setLedger}
@@ -731,7 +756,7 @@ export default function App() {
 
           <nav className="nav-container" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '24px' }}>
             <button className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`} onClick={() => setCurrentTab('properties')}>🏠 Properties</button>
-            <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}>👥 Agreements</button>
+            <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}>👥 Tenants</button>
             <button className={`nav-link ${currentTab === 'ledger'     ? 'active' : ''}`} onClick={() => setCurrentTab('ledger')}>📅 Rents</button>
             <button className={`nav-link ${currentTab === 'history'    ? 'active' : ''}`} onClick={() => setCurrentTab('history')}>📖 History Logs</button>
             <button className={`nav-link ${currentTab === 'settings'   ? 'active' : ''}`} onClick={() => setCurrentTab('settings')}>⚙️ Settings</button>
@@ -794,7 +819,7 @@ export default function App() {
       {/* MOBILE BOTTOM NAV */}
       <div className="nav-container nav-mobile-bar" style={{ display: 'none' }}>
         <button className={`nav-link ${currentTab === 'properties' ? 'active' : ''}`} onClick={() => setCurrentTab('properties')}><Home size={20} />Properties</button>
-        <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}><Users size={20} />Agreements</button>
+        <button className={`nav-link ${currentTab === 'tenants'    ? 'active' : ''}`} onClick={() => setCurrentTab('tenants')}><Users size={20} />Tenants</button>
         <button className={`nav-link ${currentTab === 'ledger'     ? 'active' : ''}`} onClick={() => setCurrentTab('ledger')}><DollarSign size={20} />Rents</button>
         <button className={`nav-link ${currentTab === 'history'    ? 'active' : ''}`} onClick={() => setCurrentTab('history')}><History size={20} />Logs</button>
         <button className={`nav-link ${currentTab === 'settings'   ? 'active' : ''}`} onClick={() => setCurrentTab('settings')}><Settings size={20} />Settings</button>

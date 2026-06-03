@@ -26,11 +26,12 @@ export default function RentLedger({
   // Years configured
   const yearsList = [2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028];
 
-  // Selected timeline state (defaults to current calendar month & year, e.g. May-2026)
+  // Selected timeline state (defaults to previous calendar month & year, e.g. Apr-2026)
   const today = new Date();
-  const currentMonthKey = monthsBase[today.getMonth()].key;
-  const currentYear = today.getFullYear();
-  const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${currentMonthKey}-${currentYear}`);
+  const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthKey = monthsBase[prevMonthDate.getMonth()].key;
+  const prevYear = prevMonthDate.getFullYear();
+  const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${prevMonthKey}-${prevYear}`);
 
   const activeMonthRef = useRef(null);
   useEffect(() => {
@@ -51,9 +52,13 @@ export default function RentLedger({
     return dateStr;
   };
 
+  const formatCurrency = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return Number(val).toLocaleString('en-IN');
+  };
+
   // Custom Payment Modal Editor States
   const [activeSquare, setActiveSquare] = useState(null); 
-  const [paymentStatus, setPaymentStatus] = useState('Paid'); 
   const [customRentDue, setCustomRentDue] = useState('');
   const [paidAmt, setPaidAmt] = useState('');
   const [remainingAmt, setRemainingAmt] = useState('');
@@ -184,7 +189,6 @@ export default function RentLedger({
 
     if (currentData) {
       if (typeof currentData === 'string') {
-        setPaymentStatus(currentData);
         setPaidAmt(currentData === 'Paid' ? computedRent.toString() : '');
         setRemainingAmt('');
         setPaymentDate(todayStr);
@@ -192,7 +196,6 @@ export default function RentLedger({
         setReceivedBy(account);
         setPaymentNotes('');
       } else {
-        setPaymentStatus(currentData.status || 'Paid');
         setPaidAmt(currentData.paid ? currentData.paid.toString() : (currentData.status === 'Paid' ? computedRent.toString() : ''));
         setRemainingAmt(currentData.remaining ? currentData.remaining.toString() : '');
         setPaymentDate(currentData.datePaid || todayStr);
@@ -201,7 +204,6 @@ export default function RentLedger({
         setPaymentNotes(currentData.notes || '');
       }
     } else {
-      setPaymentStatus('Unmarked');
       setPaidAmt('');
       setRemainingAmt('');
       setPaymentDate(todayStr);
@@ -217,18 +219,30 @@ export default function RentLedger({
 
     let details;
     const finalRentDue = Number(customRentDue) || activeSquare.monthlyRent;
+    const finalPaid = Number(paidAmt) || 0;
 
-    if (paymentStatus === 'Paid') {
+    if (finalPaid >= finalRentDue) {
       details = { 
         status: 'Paid',
         rentDue: finalRentDue,
-        paid: Number(paidAmt) || finalRentDue,
+        paid: finalPaid,
         datePaid: paymentDate || new Date().toISOString().split('T')[0],
         paymentMethod: paymentMethod,
         receivedBy: receivedBy.trim() || 'Landlord',
         notes: paymentNotes || ''
       };
-    } else if (paymentStatus === 'Unpaid') {
+    } else if (finalPaid > 0 && finalPaid < finalRentDue) {
+      details = { 
+        status: 'Partial', 
+        rentDue: finalRentDue,
+        paid: finalPaid,
+        remaining: finalRentDue - finalPaid,
+        datePaid: paymentDate || new Date().toISOString().split('T')[0],
+        paymentMethod: paymentMethod,
+        receivedBy: receivedBy.trim() || 'Landlord',
+        notes: paymentNotes || ''
+      };
+    } else {
       details = { 
         status: 'Unpaid',
         rentDue: finalRentDue,
@@ -237,26 +251,6 @@ export default function RentLedger({
         receivedBy: receivedBy.trim() || 'Landlord',
         notes: paymentNotes || ''
       };
-    } else if (paymentStatus === 'Partial') {
-      if (!paidAmt || !remainingAmt) {
-        alert('Please fill out both the Paid and Remaining amounts for partial payments.');
-        return;
-      }
-      details = { 
-        status: 'Partial', 
-        rentDue: finalRentDue,
-        paid: Number(paidAmt), 
-        remaining: Number(remainingAmt),
-        datePaid: paymentDate || new Date().toISOString().split('T')[0],
-        paymentMethod: paymentMethod,
-        receivedBy: receivedBy.trim() || 'Landlord',
-        notes: paymentNotes || ''
-      };
-    } else {
-      details = {
-        status: 'Unmarked',
-        rentDue: finalRentDue
-      }; 
     }
 
     updatePaymentStatus(activeSquare.tenantId, activeSquare.monthKey, details);
@@ -513,10 +507,10 @@ export default function RentLedger({
             boxShadow: 'var(--shadow-sm)'
           }}>
             <span style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--text-muted)', textDecoration: 'line-through' }}>
-              ₹{raise.oldRent}
+              ₹{formatCurrency(raise.oldRent)}
             </span>
             <span style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--color-primary)' }}>
-              ➡️ ₹{raise.newRent}
+              ➡️ ₹{formatCurrency(raise.newRent)}
             </span>
             <span style={{ 
               fontSize: '0.72rem', 
@@ -543,7 +537,7 @@ export default function RentLedger({
           <Calendar size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px', display: 'inline-block' }} />
           <h3 style={{ fontSize: '1.2rem', marginBottom: '6px' }}>No Tenants Registered</h3>
           <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>
-            Active tenants registered in Agreements tab will automatically populate your ledger sheets.
+            Active tenants registered in Tenants tab will automatically populate your ledger sheets.
           </p>
         </div>
       ) : (
@@ -594,15 +588,15 @@ export default function RentLedger({
                     if (typeof payData === 'string') {
                       statusText = payData;
                       statusClass = payData === 'Paid' ? 'status-paid' : 'status-unpaid';
-                      if (payData === 'Paid') amountStr = `₹${computedRent}`;
+                      if (payData === 'Paid') amountStr = `₹${formatCurrency(computedRent)}`;
                     } else {
                       statusText = payData.status || 'Paid';
-                      statusClass = payData.status === 'Paid' ? 'status-paid' : payData.status === 'Unpaid' ? 'status-unpaid' : 'status-partial';
+                      statusClass = payData.status === 'Paid' ? 'status-paid' : payData.status === 'Partial' ? 'status-partial' : 'status-unpaid';
                       
                       if (payData.status === 'Paid') {
-                        amountStr = `₹${payData.paid || computedRent}`;
+                        amountStr = `₹${formatCurrency(payData.paid || computedRent)}`;
                       } else if (payData.status === 'Partial') {
-                        amountStr = `₹${payData.paid} (Due: ₹${payData.remaining})`;
+                        amountStr = `₹${formatCurrency(payData.paid)} (Due: ₹${formatCurrency(payData.remaining)})`;
                       }
                       
                       dateStr = payData.datePaid || '—';
@@ -611,15 +605,9 @@ export default function RentLedger({
                       notesStr = payData.notes || '—';
                     }
                   } else {
-                    if (isOverdue) {
-                      statusText = 'Pending Due';
-                      statusClass = 'status-unpaid';
-                      amountStr = `₹${computedRent} (Due)`;
-                    } else {
-                      statusText = 'Pending Due';
-                      statusClass = 'status-unmarked';
-                      amountStr = `₹${computedRent} (Due)`;
-                    }
+                    statusText = 'Pending Due';
+                    statusClass = 'status-unpaid';
+                    amountStr = `₹${formatCurrency(computedRent)} (Due)`;
                   }
 
                   return (
@@ -637,11 +625,11 @@ export default function RentLedger({
                         👤 {tenant.name}
                       </td>
                       <td style={{ padding: '14px 12px', fontWeight: '700', color: 'var(--color-primary)' }}>
-                        ₹{computedRent}
+                        ₹{formatCurrency(computedRent)}
                       </td>
                       <td style={{ padding: '14px 12px' }}>
                         <span className={`ledger-status-pill ${statusClass}`}>
-                          {statusText === 'Paid' ? '🟢 Paid' : statusText === 'Unpaid' ? '🔴 Unpaid' : statusText === 'Partial' ? '🟡 Partial' : statusText === 'Prior to Tenancy' ? 'Prior' : (statusClass === 'status-unmarked' ? '⏳ Pending Due' : '🔴 Pending Due')}
+                          {statusText === 'Paid' ? '🟢 Paid' : statusText === 'Unpaid' ? '🔴 Unpaid' : statusText === 'Partial' ? '🟡 Partial' : statusText === 'Prior to Tenancy' ? 'Prior' : '🔴 Pending Due'}
                         </span>
                       </td>
                       <td style={{ padding: '14px 12px', fontWeight: statusText === 'Paid' ? '700' : '500', color: statusText === 'Paid' ? 'var(--color-primary)' : 'var(--text-main)' }}>
@@ -670,7 +658,7 @@ export default function RentLedger({
                               style={{ padding: '4px 12px', fontSize: '0.78rem', minHeight: '26px', backgroundColor: 'var(--color-primary)' }}
                               title="Mark Paid"
                             >
-                              Mark Paid
+                              Paid
                             </button>
                           )}
 
@@ -681,7 +669,7 @@ export default function RentLedger({
                               style={{ padding: '4px 12px', fontSize: '0.78rem', minHeight: '26px', border: '1px solid var(--color-danger)', color: 'var(--color-danger)' }}
                               title="Mark Unpaid / Reset"
                             >
-                              Mark Unpaid
+                              Unpaid
                             </button>
                           )}
 
@@ -754,120 +742,89 @@ export default function RentLedger({
                 />
               </div>
 
+              {(() => {
+                const rentDueNum = Number(customRentDue) || 0;
+                const paidAmtNum = Number(paidAmt) || 0;
+                const calculatedRemaining = Math.max(0, rentDueNum - paidAmtNum);
+                return (
+                  <>
+                    <div className="form-row-2">
+                      <div className="form-group">
+                        <label className="form-label">Amount Paid (₹)</label>
+                        <input 
+                          type="number" 
+                          className="form-input"
+                          value={paidAmt}
+                          onChange={(e) => setPaidAmt(e.target.value)}
+                          placeholder="e.g. 5000"
+                          min="0"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Remaining Balance Due (₹)</label>
+                        <input 
+                          type="text" 
+                          className="form-input"
+                          value={calculatedRemaining > 0 ? formatCurrency(calculatedRemaining) : '0'}
+                          readOnly
+                          disabled
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row-2">
+                      <div className="form-group">
+                        <label className="form-label">Payment Date</label>
+                        <input 
+                          type="date" 
+                          className="form-input"
+                          value={paymentDate}
+                          onChange={(e) => setPaymentDate(e.target.value)}
+                          required={paidAmtNum > 0}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Payment Method</label>
+                        <select 
+                          className="form-input"
+                          value={paymentMethod}
+                          onChange={(e) => setPaymentMethod(e.target.value)}
+                        >
+                          <option value="UPI">📱 UPI / GPay / PhonePe</option>
+                          <option value="Cash">💵 Cash</option>
+                          <option value="Bank Transfer">🏦 Net Banking / IMPS</option>
+                          <option value="Check">📝 Check</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">Received By</label>
+                      <input 
+                        type="text" 
+                        className="form-input"
+                        value={receivedBy}
+                        onChange={(e) => setReceivedBy(e.target.value)}
+                        placeholder="e.g. Landlord, Sanjana"
+                        required={paidAmtNum > 0}
+                      />
+                    </div>
+                  </>
+                );
+              })()}
+
               <div className="form-group">
-                <label className="form-label">Payment Status</label>
-                <select 
-                  className="form-input" 
-                  value={paymentStatus}
-                  onChange={(e) => {
-                    setPaymentStatus(e.target.value);
-                    if (e.target.value === 'Paid') {
-                      setPaidAmt(customRentDue);
-                      setRemainingAmt('');
-                    } else if (e.target.value === 'Unpaid' || e.target.value === 'Unmarked') {
-                      setPaidAmt('');
-                      setRemainingAmt('');
-                    }
-                  }}
-                >
-                  <option value="Paid">🟢 Fully Paid (Received Rent)</option>
-                  <option value="Unpaid">🔴 Unpaid (No Payment Received)</option>
-                  <option value="Partial">🟡 Partial Payment (Received part amount)</option>
-                  <option value="Unmarked">⚪ Unmarked / Reset</option>
-                </select>
+                <label className="form-label">Notes & Remarks</label>
+                <input 
+                  type="text" 
+                  className="form-input"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  placeholder="Enter additional details..."
+                />
               </div>
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial') && (
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Amount Paid (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-input"
-                      value={paidAmt}
-                      onChange={(e) => {
-                        setPaidAmt(e.target.value);
-                        if (paymentStatus === 'Partial' && e.target.value) {
-                          const diff = (Number(customRentDue) || activeSquare.monthlyRent) - Number(e.target.value);
-                          setRemainingAmt(diff > 0 ? diff.toString() : '0');
-                        }
-                      }}
-                      placeholder="e.g. 5000"
-                      min="0"
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Payment Date</label>
-                    <input 
-                      type="date" 
-                      className="form-input"
-                      value={paymentDate}
-                      onChange={(e) => setPaymentDate(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              {paymentStatus === 'Partial' && (
-                <div className="form-group">
-                  <label className="form-label">Remaining Balance Due (₹)</label>
-                  <input 
-                    type="number" 
-                    className="form-input"
-                    value={remainingAmt}
-                    onChange={(e) => setRemainingAmt(e.target.value)}
-                    placeholder="Calculated automatically"
-                    min="0"
-                    required
-                  />
-                </div>
-              )}
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial') && (
-                <div className="form-row-2">
-                  <div className="form-group">
-                    <label className="form-label">Payment Method</label>
-                    <select 
-                      className="form-input"
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                    >
-                      <option value="UPI">📱 UPI / GPay / PhonePe</option>
-                      <option value="Cash">💵 Cash</option>
-                      <option value="Bank Transfer">🏦 Net Banking / IMPS</option>
-                      <option value="Check">📝 Check</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Received By</label>
-                    <input 
-                      type="text" 
-                      className="form-input"
-                      value={receivedBy}
-                      onChange={(e) => setReceivedBy(e.target.value)}
-                      placeholder="e.g. Landlord, Sanjana"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial' || paymentStatus === 'Unpaid') && (
-                <div className="form-group">
-                  <label className="form-label">Notes & Remarks</label>
-                  <input 
-                    type="text" 
-                    className="form-input"
-                    value={paymentNotes}
-                    onChange={(e) => setPaymentNotes(e.target.value)}
-                    placeholder="Enter additional details..."
-                  />
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button 

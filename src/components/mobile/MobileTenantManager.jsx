@@ -20,6 +20,11 @@ import {
 } from 'lucide-react';
 import PdfInlinePreview from '../PdfInlinePreview';
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || val === '—' || isNaN(Number(val))) return '—';
+  return Number(val).toLocaleString('en-IN');
+};
+
 const compressImage = (file, maxWidth, maxHeight, quality) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -441,7 +446,7 @@ export default function MobileTenantManager({
         <>
           <div>
             <h2 style={{ fontSize: '1.45rem', fontWeight: '800', letterSpacing: '-0.5px', marginBottom: '2px' }}>
-              Agreements Dossiers
+              Tenants Dossiers
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--mobile-muted)' }}>
               Track resident contact cards, verified files, and custom rental scheduled raises.
@@ -470,7 +475,7 @@ export default function MobileTenantManager({
               border: '1px solid var(--mobile-border)'
             }}>
               <Users size={36} style={{ color: 'var(--mobile-muted)', marginBottom: '10px', display: 'inline-block' }} />
-              <h4 style={{ fontWeight: '800', fontSize: '1rem' }}>No Active Agreements</h4>
+              <h4 style={{ fontWeight: '800', fontSize: '1rem' }}>No Active Tenants</h4>
               <p style={{ fontSize: '0.76rem', color: 'var(--mobile-muted)', marginTop: '4px' }}>
                 Tap the Floating action button (+) or click below to register a new tenant dossier:
               </p>
@@ -479,7 +484,7 @@ export default function MobileTenantManager({
                 onClick={handleOpenAdd}
                 style={{ marginTop: '16px', width: '100%' }}
               >
-                Create Tenant Agreement
+                Register Tenant
               </button>
             </div>
           ) : (
@@ -528,13 +533,13 @@ export default function MobileTenantManager({
                     <div className="mobile-detail-row">
                       <span className="mobile-detail-label">Monthly Rent Amount</span>
                       <span className="mobile-detail-value" style={{ color: 'var(--mobile-primary)', fontWeight: '800' }}>
-                        ₹{t.rent}/mo
+                        ₹{formatCurrency(t.rent)}/mo
                       </span>
                     </div>
 
                     <div className="mobile-detail-row">
                       <span className="mobile-detail-label">Security Deposit</span>
-                      <span className="mobile-detail-value">₹{t.securityDeposit}</span>
+                      <span className="mobile-detail-value">₹{formatCurrency(t.securityDeposit)}</span>
                     </div>
 
                     {/* Direct Contact Buttons Bar */}
@@ -569,7 +574,7 @@ export default function MobileTenantManager({
             <div className="mobile-sheet-handle" />
             
             <div className="mobile-sheet-header">
-              <h3 className="mobile-sheet-title">👥 Agreement Dossier Sheet</h3>
+              <h3 className="mobile-sheet-title">👥 Tenant Dossier Sheet</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button 
                   className="mobile-sheet-close" 
@@ -633,12 +638,12 @@ export default function MobileTenantManager({
               <div className="mobile-detail-row">
                 <span className="mobile-detail-label">💰 Monthly Rent</span>
                 <span className="mobile-detail-value" style={{ color: 'var(--mobile-primary)', fontWeight: '800' }}>
-                  ₹{selectedTenant.rent}/mo
+                  ₹{formatCurrency(selectedTenant.rent)}/mo
                 </span>
               </div>
               <div className="mobile-detail-row">
                 <span className="mobile-detail-label">🔐 Security Deposit</span>
-                <span className="mobile-detail-value">₹{selectedTenant.securityDeposit}</span>
+                <span className="mobile-detail-value">₹{formatCurrency(selectedTenant.securityDeposit)}</span>
               </div>
               <div className="mobile-detail-row">
                 <span className="mobile-detail-label">📅 Move-in Date</span>
@@ -749,7 +754,7 @@ export default function MobileTenantManager({
               ) : (
                 <div>
                   Automatic {selectedTenant.scheduledRaisePercent}% Rent Increase on {formatDateToDDMMYYYY(selectedTenant.scheduledRaiseEffectiveDate)}.
-                  <br />Rent will raise to <strong>₹{getRaisePreview(selectedTenant.rent, selectedTenant.scheduledRaisePercent).newRent}</strong>.
+                  <br />Rent will raise to <strong>₹{formatCurrency(getRaisePreview(selectedTenant.rent, selectedTenant.scheduledRaisePercent).newRent)}</strong>.
                 </div>
               )}
 
@@ -863,7 +868,7 @@ export default function MobileTenantManager({
                   padding: '8px',
                   borderRadius: '8px'
                 }}>
-                  Future Proj: rent raises to ₹{getRaisePreview(targetTenant.rent, raisePercent).newRent}
+                  Future Proj: rent raises to ₹{formatCurrency(getRaisePreview(targetTenant.rent, raisePercent).newRent)}
                 </div>
               )}
 
@@ -1067,7 +1072,7 @@ export default function MobileTenantManager({
                     fontWeight: '700', 
                     color: 'var(--mobile-muted)' 
                   }}>
-                    Future Rent: ₹{Math.round(Number(rent) + (Number(rent) * Number(scheduledRaisePercent)) / 100)} (after 11 months)
+                    Future Rent: ₹{formatCurrency(Math.round(Number(rent) + (Number(rent) * Number(scheduledRaisePercent)) / 100))} (after 11 months)
                   </div>
                 )}
               </div>
@@ -1137,7 +1142,7 @@ export default function MobileTenantManager({
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 6px', borderBottom: idx === outstanding.length - 1 ? 'none' : '1px solid var(--mobile-border)', fontSize: '0.72rem' }}>
                           <span style={{ fontWeight: '700' }}>📅 {d.monthName} {d.year}</span>
                           <span style={{ color: '#ef4444', fontWeight: '700' }}>
-                            {d.status === 'Partial' ? `Partial (Paid ₹${d.paidAmount} / Due ₹${d.rentDue})` : `Unpaid (₹${d.rentDue})`}
+                             {d.status === 'Partial' ? `Partial (Paid ₹${formatCurrency(d.paidAmount)} / Due ₹${formatCurrency(d.rentDue)})` : `Unpaid (₹${formatCurrency(d.rentDue)})`}
                           </span>
                         </div>
                       ))}
@@ -1156,7 +1161,7 @@ export default function MobileTenantManager({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
                 <div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--mobile-muted)', fontWeight: '600' }}>Deposit Received</div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--mobile-secondary)', marginTop: '2px' }}>₹{tenantToVacate.securityDeposit}</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--mobile-secondary)', marginTop: '2px' }}>₹{formatCurrency(tenantToVacate.securityDeposit)}</div>
                 </div>
                 <div>
                   <label className="mobile-form-label" style={{ fontSize: '0.65rem', marginBottom: '2px' }}>Deductions (₹)</label>
@@ -1186,7 +1191,7 @@ export default function MobileTenantManager({
               <div style={{ borderTop: '1px dashed var(--mobile-border)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ fontWeight: '700', fontSize: '0.78rem' }}>Net Refund to Tenant:</div>
                 <div style={{ fontSize: '1.15rem', fontWeight: '900', color: 'var(--mobile-primary)' }}>
-                  ₹{Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions))}
+                   ₹{formatCurrency(Math.max(0, Number(tenantToVacate.securityDeposit) - Number(vacateDeductions)))}
                 </div>
               </div>
             </div>
@@ -1234,7 +1239,7 @@ export default function MobileTenantManager({
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '10px', backgroundColor: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '10px', color: '#ef4444', fontSize: '0.72rem', lineHeight: '1.3', marginBottom: '16px' }}>
               <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
-                Vacating ends this agreement cycle permanently and archives checkout settlement records. This action is irreversible.
+                 Vacating ends this tenant cycle permanently and archives checkout settlement records. This action is irreversible.
               </div>
             </div>
 

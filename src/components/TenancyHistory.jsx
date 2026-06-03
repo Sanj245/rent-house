@@ -13,6 +13,11 @@ const formatDateToDDMMYYYY = (dateStr) => {
   return dateStr;
 };
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || isNaN(val)) return '0';
+  return Number(val).toLocaleString('en-IN');
+};
+
 export default function TenancyHistory({ properties, tenants, pastTenants, ledger }) {
   const [selectedPropertyId, setSelectedPropertyId] = React.useState(
     properties.length > 0 ? properties[0].id : ''
@@ -88,7 +93,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
             <td style="padding:10px 8px;font-weight:700;">${t.name}</td>
             <td style="padding:10px 8px;color:#555;">${t.phone}</td>
             <td style="padding:10px 8px;font-size:11px;">In: ${formatDateToDDMMYYYY(t.moveInDate)}<br/><span style="color:#777;">Out: ${formatDateToDDMMYYYY(t.moveOutDate)}</span></td>
-            <td style="padding:10px 8px;font-size:11px;">Deposit: ₹${t.securityDeposit}<br/><span style="color:#d64933;">Deductions: ₹${deductions}</span><br/><span style="color:#3d6a54;font-weight:700;">Refund: ₹${refund}</span></td>
+            <td style="padding:10px 8px;font-size:11px;">Deposit: ₹${Number(t.securityDeposit).toLocaleString('en-IN')}<br/><span style="color:#d64933;">Deductions: ₹${Number(deductions).toLocaleString('en-IN')}</span><br/><span style="color:#3d6a54;font-weight:700;">Refund: ₹${Number(refund).toLocaleString('en-IN')}</span></td>
             <td style="padding:10px 8px;color:#666;font-style:italic;font-size:11.5px;max-width:140px;word-break:break-all;">${t.vacateNotes || '—'}</td>
             <td style="padding:10px 8px;text-align:right;font-weight:800;color:#3d6a54;">₹${Number(t.totalRentCollected).toLocaleString('en-IN')}</td>
           </tr>`;
@@ -157,7 +162,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
             </div>
             <div class="stat-box orange">
               <div class="stat-label">Current Monthly Rent</div>
-              <div class="stat-value orange">${activeTenant ? '₹' + activeTenant.rent + '/mo' : 'Vacant'}</div>
+              <div class="stat-value orange">${activeTenant ? '₹' + Number(activeTenant.rent).toLocaleString('en-IN') + '/mo' : 'Vacant'}</div>
             </div>
             <div class="stat-box grey">
               <div class="stat-label">Tenancy Cycles</div>
@@ -343,7 +348,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                         Total Collected
                       </div>
                       <div style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--color-primary)', marginTop: '2px' }}>
-                        ₹{financials.totalRevenue}
+                        ₹{formatCurrency(financials.totalRevenue)}
                       </div>
                     </div>
                   </div>
@@ -378,7 +383,7 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                       <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '4px' }}>
                         {activeTenant ? (
                           <span style={{ color: 'var(--color-primary)', fontWeight: '800' }}>
-                            🟢 Active (₹{financials.activeRent}/mo)
+                            🟢 Active (₹{formatCurrency(financials.activeRent)}/mo)
                           </span>
                         ) : (
                           <span style={{ color: 'var(--color-warning)', fontWeight: '700' }}>
@@ -486,21 +491,21 @@ export default function TenancyHistory({ properties, tenants, pastTenants, ledge
                               <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '2px' }}>Out: {formatDateToDDMMYYYY(tenant.moveOutDate)}</div>
                             </td>
                             <td style={{ padding: '12px 8px', fontSize: '0.84rem' }}>
-                              <div>Deposit: ₹{tenant.securityDeposit}</div>
+                              <div>Deposit: ₹{formatCurrency(tenant.securityDeposit)}</div>
                               {tenant.deductions > 0 ? (
                                 <div style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginTop: '2px' }}>
-                                  Deductions: -₹{tenant.deductions}
+                                  Deductions: -₹{formatCurrency(tenant.deductions)}
                                 </div>
                               ) : null}
                               <div style={{ color: 'var(--color-primary)', fontWeight: '700', fontSize: '0.78rem', marginTop: '2px' }}>
-                                Refund: ₹{tenant.refundAmount !== undefined ? tenant.refundAmount : (tenant.securityDeposit - (tenant.deductions || 0))}
+                                Refund: ₹{formatCurrency(tenant.refundAmount !== undefined ? tenant.refundAmount : (tenant.securityDeposit - (tenant.deductions || 0)))}
                               </div>
                             </td>
                             <td style={{ padding: '12px 8px', fontSize: '0.84rem', color: 'var(--text-muted)', fontStyle: 'italic', maxWidth: '160px', wordBreak: 'break-word' }}>
                               {tenant.vacateNotes || '—'}
                             </td>
                             <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: '800', color: 'var(--color-primary)', fontSize: '1rem' }}>
-                              ₹{tenant.totalRentCollected}
+                              ₹{formatCurrency(tenant.totalRentCollected)}
                             </td>
                           </tr>
                         ))}

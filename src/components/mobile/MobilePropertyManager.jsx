@@ -51,6 +51,11 @@ const compressImage = (file, maxWidth, maxHeight, quality) => {
   });
 };
 
+const formatCurrency = (val) => {
+  if (val === undefined || val === null || isNaN(val)) return '0';
+  return Number(val).toLocaleString('en-IN');
+};
+
 export default function MobilePropertyManager({
   properties,
   tenants,
@@ -141,8 +146,8 @@ export default function MobilePropertyManager({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert('⚠️ Image size too large:\n\nTo preserve local storage space, please upload appliance images smaller than 15.0 MB.');
+    if (file.size > 800 * 1024) {
+      alert('⚠️ Image size too large:\n\nTo prevent save failures and preserve database limits, please upload appliance images smaller than 800 KB.');
       e.target.value = null; 
       return;
     }
@@ -353,7 +358,7 @@ export default function MobilePropertyManager({
                         fontSize: '0.74rem'
                       }}>
                         <div style={{ fontWeight: '800', color: 'var(--mobile-primary)', marginBottom: '4px' }}>👤 Current Resident:</div>
-                        <div>Name: <strong>{tenant.name}</strong> • Rent: <strong>₹{tenant.rent}/mo</strong></div>
+                        <div>Name: <strong>{tenant.name}</strong> • Rent: <strong>₹{formatCurrency(tenant.rent)}/mo</strong></div>
                       </div>
                     )}
                   </div>
@@ -415,7 +420,7 @@ export default function MobilePropertyManager({
                   </h4>
                   <div>Tenant: <strong>{resident.name}</strong></div>
                   <div>Phone: <strong>{resident.phone}</strong></div>
-                  <div>Current Rent: <strong>₹{resident.rent}/mo</strong></div>
+                  <div>Current Rent: <strong>₹{formatCurrency(resident.rent)}/mo</strong></div>
                   
                   {resident.agreementFile && (
                     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed rgba(61, 106, 84, 0.2)' }}>

@@ -35,9 +35,10 @@ export default function MobileRentLedger({
   const yearsList = [2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028];
 
   const today = new Date();
-  const currentMonthKey = monthsBase[today.getMonth()].key;
-  const currentYear = today.getFullYear();
-  const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${currentMonthKey}-${currentYear}`);
+  const prevMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthKey = monthsBase[prevMonthDate.getMonth()].key;
+  const prevYear = prevMonthDate.getFullYear();
+  const [selectedTimelineKey, setSelectedTimelineKey] = useState(`${prevMonthKey}-${prevYear}`);
 
   const activeMonthRef = useRef(null);
   useEffect(() => {
@@ -58,9 +59,13 @@ export default function MobileRentLedger({
     return dateStr;
   };
 
+  const formatCurrency = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return Number(val).toLocaleString('en-IN');
+  };
+
   // Edit payment sheet
   const [editPaymentNode, setEditPaymentNode] = useState(null);
-  const [paymentStatus, setPaymentStatus] = useState('Paid');
   const [customRentDue, setCustomRentDue] = useState('');
   const [paidAmt, setPaidAmt] = useState('');
   const [remainingAmt, setRemainingAmt] = useState('');
@@ -185,11 +190,10 @@ export default function MobileRentLedger({
 
     if (currentData) {
       if (typeof currentData === 'string') {
-        setPaymentStatus(currentData); setPaidAmt(currentData === 'Paid' ? computedRent.toString() : '');
+        setPaidAmt(currentData === 'Paid' ? computedRent.toString() : '');
         setRemainingAmt(''); setPaymentDate(todayStr); setPaymentMethod(isCash ? 'Cash' : 'UPI');
         setReceivedBy(account); setPaymentNotes('');
       } else {
-        setPaymentStatus(currentData.status || 'Paid');
         setPaidAmt(currentData.paid ? currentData.paid.toString() : (currentData.status === 'Paid' ? computedRent.toString() : ''));
         setRemainingAmt(currentData.remaining ? currentData.remaining.toString() : '');
         setPaymentDate(currentData.datePaid || todayStr);
@@ -198,7 +202,7 @@ export default function MobileRentLedger({
         setPaymentNotes(currentData.notes || '');
       }
     } else {
-      setPaymentStatus('Unmarked'); setPaidAmt(''); setRemainingAmt('');
+      setPaidAmt(''); setRemainingAmt('');
       setPaymentDate(todayStr); setPaymentMethod(isCash ? 'Cash' : 'UPI');
       setReceivedBy(account); setPaymentNotes('');
     }
@@ -208,16 +212,15 @@ export default function MobileRentLedger({
     e.preventDefault();
     if (!editPaymentNode) return;
     const finalRentDue = Number(customRentDue) || editPaymentNode.computedRent;
+    const finalPaid = Number(paidAmt) || 0;
+
     let details;
-    if (paymentStatus === 'Paid') {
-      details = { status: 'Paid', rentDue: finalRentDue, paid: Number(paidAmt) || finalRentDue, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
-    } else if (paymentStatus === 'Unpaid') {
-      details = { status: 'Unpaid', rentDue: finalRentDue, datePaid: '', paymentMethod: '—', receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
-    } else if (paymentStatus === 'Partial') {
-      if (!paidAmt || !remainingAmt) { alert('Please fill Paid and Remaining amounts.'); return; }
-      details = { status: 'Partial', rentDue: finalRentDue, paid: Number(paidAmt), remaining: Number(remainingAmt), datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
+    if (finalPaid >= finalRentDue) {
+      details = { status: 'Paid', rentDue: finalRentDue, paid: finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
+    } else if (finalPaid > 0 && finalPaid < finalRentDue) {
+      details = { status: 'Partial', rentDue: finalRentDue, paid: finalPaid, remaining: finalRentDue - finalPaid, datePaid: paymentDate || new Date().toISOString().split('T')[0], paymentMethod, receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
     } else {
-      details = undefined;
+      details = { status: 'Unpaid', rentDue: finalRentDue, datePaid: '', paymentMethod: '—', receivedBy: receivedBy.trim() || 'Landlord', notes: paymentNotes || '' };
     }
     updatePaymentStatus(editPaymentNode.tenantId, editPaymentNode.timelineKey, details);
     setEditPaymentNode(null);
@@ -270,11 +273,9 @@ export default function MobileRentLedger({
     const payData = getPaymentData(tenantPayments, mKey, parseInt(yStr, 10));
     const computedRent = getRentForMonth(tenant, selectedTimelineKey);
     const isAvailable = isMonthAvailable(tenant.moveInDate, selectedTimelineKey);
-    const dueDate = getDueDateOfTimelineKey(selectedTimelineKey);
-    const isOverdue = dueDate && new Date() >= dueDate;
 
     let statusText  = 'Pending Due';
-    let amountStr   = `₹${computedRent}`;
+    let amountStr   = `₹${formatCurrency(computedRent)}`;
     let dateStr     = '—';
     let methodStr   = '—';
     let receiverStr = '—';
@@ -292,33 +293,25 @@ export default function MobileRentLedger({
         statusColor = payData === 'Paid' ? '#3d6a54' : '#e05c3a';
         statusBg    = payData === 'Paid' ? 'rgba(61,106,84,0.09)' : 'rgba(224,92,58,0.09)';
         statusEmoji = payData === 'Paid' ? '🟢' : '🔴';
-        amountStr   = payData === 'Paid' ? `₹${computedRent}` : `₹${computedRent}`;
+        amountStr   = payData === 'Paid' ? `₹${formatCurrency(computedRent)}` : `₹${formatCurrency(computedRent)}`;
       } else {
         statusText  = payData.status || 'Paid';
         statusColor = payData.status === 'Paid' ? '#3d6a54' : payData.status === 'Partial' ? '#b8860b' : '#e05c3a';
         statusBg    = payData.status === 'Paid' ? 'rgba(61,106,84,0.09)' : payData.status === 'Partial' ? 'rgba(184,134,11,0.09)' : 'rgba(224,92,58,0.09)';
         statusEmoji = payData.status === 'Paid' ? '🟢' : payData.status === 'Partial' ? '🟡' : '🔴';
-        if (payData.status === 'Paid')    amountStr = `₹${payData.paid || computedRent}`;
-        if (payData.status === 'Partial') amountStr = `₹${payData.paid} paid`;
+        if (payData.status === 'Paid')    amountStr = `₹${formatCurrency(payData.paid || computedRent)}`;
+        if (payData.status === 'Partial') amountStr = `₹${formatCurrency(payData.paid)} paid`;
         dateStr     = payData.datePaid    || '—';
         methodStr   = payData.paymentMethod || '—';
         receiverStr = payData.receivedBy   || '—';
         notesStr    = payData.notes         || '—';
       }
     } else {
-      if (isOverdue) {
-        statusText  = 'Pending Due';
-        statusColor = '#e05c3a';
-        statusBg    = 'rgba(224,92,58,0.09)';
-        statusEmoji = '🔴';
-        amountStr   = `₹${computedRent} (Due)`;
-      } else {
-        statusText  = 'Pending Due';
-        statusColor = '#4682b4';
-        statusBg    = 'rgba(70,130,180,0.1)';
-        statusEmoji = '⏳';
-        amountStr   = `₹${computedRent} (Due)`;
-      }
+      statusText  = 'Pending Due';
+      statusColor = '#e05c3a';
+      statusBg    = 'rgba(224,92,58,0.09)';
+      statusEmoji = '🔴';
+      amountStr   = `₹${formatCurrency(computedRent)} (Due)`;
     }
 
     return { computedRent, isAvailable, payData, statusText, amountStr, dateStr, methodStr, receiverStr, notesStr, statusColor, statusBg, statusEmoji };
@@ -439,10 +432,10 @@ export default function MobileRentLedger({
             border: '1px solid var(--mobile-border)'
           }}>
             <span style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--mobile-muted)', textDecoration: 'line-through' }}>
-              ₹{raise.oldRent}
+              ₹{formatCurrency(raise.oldRent)}
             </span>
             <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--mobile-primary)' }}>
-              ➡️ ₹{raise.newRent}
+              ➡️ ₹{formatCurrency(raise.newRent)}
             </span>
             <span style={{ 
               fontSize: '0.62rem', 
@@ -508,7 +501,7 @@ export default function MobileRentLedger({
                       💵 Rent Due
                     </div>
                     <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--mobile-primary)' }}>
-                      ₹{computedRent}
+                      ₹{formatCurrency(computedRent)}
                     </div>
                   </div>
 
@@ -522,7 +515,7 @@ export default function MobileRentLedger({
                     </div>
                     {isPartial && payData && typeof payData === 'object' && payData.remaining && (
                       <div style={{ fontSize: '0.68rem', color: 'var(--mobile-danger)', fontWeight: '700', marginTop: '1px' }}>
-                        Balance due: ₹{payData.remaining}
+                        Balance due: ₹{formatCurrency(payData.remaining)}
                       </div>
                     )}
                   </div>
@@ -581,7 +574,7 @@ export default function MobileRentLedger({
                           fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
                         }}
                       >
-                        <CheckCircle size={14} /> Mark Paid
+                        <CheckCircle size={14} /> Paid
                       </button>
                     )}
                     {(isPaid || isPartial) && (
@@ -593,7 +586,7 @@ export default function MobileRentLedger({
                           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
                         }}
                       >
-                        <XCircle size={14} /> Mark Unpaid
+                        <XCircle size={14} /> Unpaid
                       </button>
                     )}
                     <button
@@ -636,70 +629,51 @@ export default function MobileRentLedger({
                 <input type="number" className="mobile-form-input" value={customRentDue} onChange={(e) => setCustomRentDue(e.target.value)} min="0" required />
               </div>
 
+              {(() => {
+                const rentDueNum = Number(customRentDue) || 0;
+                const paidAmtNum = Number(paidAmt) || 0;
+                const calculatedRemaining = Math.max(0, rentDueNum - paidAmtNum);
+                return (
+                  <>
+                    <div className="mobile-form-row">
+                      <div className="mobile-form-group">
+                        <label className="mobile-form-label">Amount Paid (₹)</label>
+                        <input type="number" className="mobile-form-input" value={paidAmt} onChange={(e) => setPaidAmt(e.target.value)} min="0" />
+                      </div>
+                      <div className="mobile-form-group">
+                        <label className="mobile-form-label">Balance Remaining (₹)</label>
+                        <input type="text" className="mobile-form-input" value={calculatedRemaining > 0 ? formatCurrency(calculatedRemaining) : '0'} readOnly disabled />
+                      </div>
+                    </div>
+
+                    <div className="mobile-form-row">
+                      <div className="mobile-form-group">
+                        <label className="mobile-form-label">Payment Date</label>
+                        <input type="date" className="mobile-form-input" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required={paidAmtNum > 0} />
+                      </div>
+                      <div className="mobile-form-group">
+                        <label className="mobile-form-label">Payment Method</label>
+                        <select className="mobile-form-input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                          <option value="UPI">📱 UPI / GPay / PhonePe</option>
+                          <option value="Cash">💵 Cash</option>
+                          <option value="Bank Transfer">🏦 IMPS / Net Banking</option>
+                          <option value="Check">📝 Check</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mobile-form-group">
+                      <label className="mobile-form-label">Received By</label>
+                      <input type="text" className="mobile-form-input" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} required={paidAmtNum > 0} />
+                    </div>
+                  </>
+                );
+              })()}
+
               <div className="mobile-form-group">
-                <label className="mobile-form-label">Payment Status</label>
-                <select className="mobile-form-input" value={paymentStatus} onChange={(e) => {
-                  setPaymentStatus(e.target.value);
-                  if (e.target.value === 'Paid') { setPaidAmt(customRentDue); setRemainingAmt(''); }
-                  else if (e.target.value === 'Unpaid' || e.target.value === 'Unmarked') { setPaidAmt(''); setRemainingAmt(''); }
-                }}>
-                  <option value="Paid">🟢 Fully Paid</option>
-                  <option value="Unpaid">🔴 Unpaid</option>
-                  <option value="Partial">🟡 Partial Payment</option>
-                  <option value="Unmarked">⚪ Reset / Unmarked</option>
-                </select>
+                <label className="mobile-form-label">Remarks / Notes</label>
+                <input type="text" className="mobile-form-input" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="e.g. UPI ref no." />
               </div>
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial') && (
-                <div className="mobile-form-row">
-                  <div className="mobile-form-group">
-                    <label className="mobile-form-label">Amount Paid (₹)</label>
-                    <input type="number" className="mobile-form-input" value={paidAmt} onChange={(e) => {
-                      setPaidAmt(e.target.value);
-                      if (paymentStatus === 'Partial' && e.target.value) {
-                        const diff = (Number(customRentDue) || editPaymentNode.computedRent) - Number(e.target.value);
-                        setRemainingAmt(diff > 0 ? diff.toString() : '0');
-                      }
-                    }} min="0" required />
-                  </div>
-                  <div className="mobile-form-group">
-                    <label className="mobile-form-label">Payment Date</label>
-                    <input type="date" className="mobile-form-input" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
-                  </div>
-                </div>
-              )}
-
-              {paymentStatus === 'Partial' && (
-                <div className="mobile-form-group">
-                  <label className="mobile-form-label">Balance Remaining (₹)</label>
-                  <input type="number" className="mobile-form-input" value={remainingAmt} onChange={(e) => setRemainingAmt(e.target.value)} min="0" required />
-                </div>
-              )}
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial') && (
-                <div className="mobile-form-row">
-                  <div className="mobile-form-group">
-                    <label className="mobile-form-label">Payment Method</label>
-                    <select className="mobile-form-input" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                      <option value="UPI">📱 UPI / GPay / PhonePe</option>
-                      <option value="Cash">💵 Cash</option>
-                      <option value="Bank Transfer">🏦 IMPS / Net Banking</option>
-                      <option value="Check">📝 Check</option>
-                    </select>
-                  </div>
-                  <div className="mobile-form-group">
-                    <label className="mobile-form-label">Received By</label>
-                    <input type="text" className="mobile-form-input" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} required />
-                  </div>
-                </div>
-              )}
-
-              {(paymentStatus === 'Paid' || paymentStatus === 'Partial' || paymentStatus === 'Unpaid') && (
-                <div className="mobile-form-group">
-                  <label className="mobile-form-label">Remarks / Notes</label>
-                  <input type="text" className="mobile-form-input" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} placeholder="e.g. UPI ref no." />
-                </div>
-              )}
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
                 <button type="button" className="mobile-btn" style={{ flex: 1 }} onClick={() => setEditPaymentNode(null)}>Cancel</button>

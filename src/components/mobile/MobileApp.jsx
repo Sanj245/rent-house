@@ -51,9 +51,10 @@ export default function MobileApp({
   updatePaymentStatus,
   updateTenantNotes,
   handleExportData,
-  requestNotificationPermission
+  requestNotificationPermission,
+  activeTab,
+  setActiveTab
 }) {
-  const [activeTab, setActiveTab] = useState('ledger');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
@@ -71,7 +72,7 @@ export default function MobileApp({
       setEditingTenant(null);
       const vacantProperties = properties.filter(p => !tenants.some(t => t.propertyId === p.id));
       if (vacantProperties.length === 0) {
-        alert('⚠️ No Vacant Properties: Please register a vacant property first before adding a tenant agreement.');
+        alert('⚠️ No Vacant Properties: Please register a vacant property first before adding a tenant.');
         closeFab();
         return;
       }
@@ -254,7 +255,7 @@ export default function MobileApp({
           </button>
 
           <button className="mobile-fab-menu-item" onClick={() => openSheet('add-tenant')}>
-            <span className="mobile-fab-menu-label">Add Agreement</span>
+            <span className="mobile-fab-menu-label">Add Tenant</span>
             <div className="mobile-fab-menu-icon">
               <Users size={18} />
             </div>
@@ -282,7 +283,7 @@ export default function MobileApp({
           <div className="mobile-tab-icon-wrapper">
             <Users size={20} />
           </div>
-          Agreements
+          Tenants
         </button>
 
         {/* CENTERED ADD ACTION TAB BUTTON */}
@@ -453,7 +454,7 @@ export default function MobileApp({
                   💾 Backup Offline Copy
                 </h4>
                 <p style={{ fontSize: '0.78rem', color: 'var(--mobile-muted)', lineHeight: '1.4', marginBottom: '8px' }}>
-                  Download a physical backup file (`.json`) of all agreements, payments, and registered properties.
+                  Download a physical backup file (`.json`) of all tenants, payments, and registered properties.
                 </p>
                 <button 
                   className="mobile-btn"
