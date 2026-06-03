@@ -6,8 +6,24 @@ export default function RentLedger({
   properties, 
   ledger, 
   updatePaymentStatus,
-  updateTenantNotes 
+  updateTenantNotes,
+  highlightedTenantId,
+  setHighlightedTenantId
 }) {
+  React.useEffect(() => {
+    if (highlightedTenantId) {
+      const element = document.getElementById(`ledger-row-${highlightedTenantId}`);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const timer = setTimeout(() => {
+            if (setHighlightedTenantId) setHighlightedTenantId(null);
+          }, 3000);
+          return () => clearTimeout(timer);
+        }, 150);
+      }
+    }
+  }, [highlightedTenantId, setHighlightedTenantId]);
   const monthsBase = [
     { name: 'January', key: 'Jan', index: 1 },
     { name: 'February', key: 'Feb', index: 2 },
@@ -122,7 +138,7 @@ export default function RentLedger({
           return baseRent;
         } else {
           // Month on or after scheduled increase
-          const raisePercent = Number(tenant.scheduledRaisePercent || 10);
+          const raisePercent = Number(tenant.scheduledRaisePercent || 5);
           const raiseAmt = Math.round((baseRent * raisePercent) / 100);
           return baseRent + raiseAmt;
         }
@@ -611,13 +627,20 @@ export default function RentLedger({
                   }
 
                   return (
-                    <tr key={tenant.id} style={{ 
-                      borderBottom: '1px solid var(--border-color)', 
-                      fontSize: '0.92rem',
-                      opacity: isAvailable ? 1 : 0.5,
-                      backgroundColor: isAvailable && !payData ? 'rgba(214, 73, 51, 0.02)' : 'transparent',
-                      transition: 'var(--transition-normal)'
-                    }} className="ruled-row">
+                    <tr 
+                      key={tenant.id} 
+                      id={`ledger-row-${tenant.id}`}
+                      style={{ 
+                        borderBottom: '1px solid var(--border-color)', 
+                        fontSize: '0.92rem',
+                        opacity: isAvailable ? 1 : 0.5,
+                        backgroundColor: tenant.id === highlightedTenantId 
+                          ? 'rgba(212, 163, 115, 0.15)' 
+                          : (isAvailable && !payData ? 'rgba(214, 73, 51, 0.02)' : 'transparent'),
+                        transition: 'all 0.4s ease'
+                      }} 
+                      className="ruled-row"
+                    >
                       <td style={{ padding: '14px 12px', fontWeight: '700', color: 'var(--text-main)' }}>
                         🏠 {getPropertyName(tenant.propertyId)}
                       </td>

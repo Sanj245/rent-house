@@ -53,7 +53,9 @@ export default function MobileApp({
   handleExportData,
   requestNotificationPermission,
   activeTab,
-  setActiveTab
+  setActiveTab,
+  highlightedTenantId,
+  setHighlightedTenantId
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -214,6 +216,8 @@ export default function MobileApp({
             editTenant={editTenant}
             editingTenant={editingTenant}
             setEditingTenant={setEditingTenant}
+            highlightedTenantId={highlightedTenantId}
+            setHighlightedTenantId={setHighlightedTenantId}
           />
         )}
 
@@ -224,6 +228,8 @@ export default function MobileApp({
             ledger={ledger}
             updatePaymentStatus={updatePaymentStatus}
             updateTenantNotes={updateTenantNotes}
+            highlightedTenantId={highlightedTenantId}
+            setHighlightedTenantId={setHighlightedTenantId}
           />
         )}
 

@@ -88,8 +88,24 @@ export default function MobileTenantManager({
   isPortal = false,
   editTenant,
   editingTenant,
-  setEditingTenant
+  setEditingTenant,
+  highlightedTenantId,
+  setHighlightedTenantId
 }) {
+  useEffect(() => {
+    if (highlightedTenantId) {
+      const element = document.getElementById(`mobile-tenant-card-${highlightedTenantId}`);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const timer = setTimeout(() => {
+            if (setHighlightedTenantId) setHighlightedTenantId(null);
+          }, 3000);
+          return () => clearTimeout(timer);
+        }, 150);
+      }
+    }
+  }, [highlightedTenantId, setHighlightedTenantId]);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Selected tenant details drawer
@@ -264,10 +280,10 @@ export default function MobileTenantManager({
     setTargetTenant(tenant);
     setRaisePercent(tenant.scheduledRaisePercent?.toString() || '5');
     
-    const elevenMonthsLater = new Date();
-    elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
-    const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
-    setRaiseEffectiveDate(tenant.scheduledRaiseEffectiveDate || elevenMonthsLaterStr);
+    const twelveMonthsLater = new Date();
+    twelveMonthsLater.setMonth(twelveMonthsLater.getMonth() + 12);
+    const twelveMonthsLaterStr = twelveMonthsLater.toISOString().split('T')[0];
+    setRaiseEffectiveDate(tenant.scheduledRaiseEffectiveDate || twelveMonthsLaterStr);
     
     setIsRaiseSheetOpen(true);
   };
@@ -361,7 +377,7 @@ export default function MobileTenantManager({
     if (!dateStr) return '';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return '';
-    date.setMonth(date.getMonth() + 11);
+    date.setMonth(date.getMonth() + 12);
     return date.toISOString().split('T')[0];
   };
 
@@ -494,9 +510,19 @@ export default function MobileTenantManager({
                 return (
                   <div 
                     key={t.id} 
+                    id={`mobile-tenant-card-${t.id}`}
                     className="mobile-card"
                     onClick={() => setSelectedTenant(t)}
-                    style={{ borderLeft: '4px solid var(--mobile-secondary)', cursor: 'pointer' }}
+                    style={{ 
+                      borderLeft: '4px solid var(--mobile-secondary)', 
+                      cursor: 'pointer',
+                      transition: 'all 0.4s ease',
+                      ...(t.id === highlightedTenantId ? {
+                        boxShadow: '0 0 15px rgba(212, 163, 115, 0.4)',
+                        borderColor: 'var(--mobile-secondary)',
+                        backgroundColor: 'rgba(212, 163, 115, 0.05)'
+                      } : {})
+                    }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       {t.photo ? (
@@ -746,7 +772,7 @@ export default function MobileTenantManager({
                 color: selectedTenant.raiseApplied ? 'var(--mobile-primary)' : 'var(--mobile-secondary)',
                 marginBottom: '4px' 
               }}>
-                {selectedTenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase (11 Months):'}
+                {selectedTenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase (12 Months):'}
               </h4>
               
               {selectedTenant.raiseApplied ? (
@@ -1072,7 +1098,7 @@ export default function MobileTenantManager({
                     fontWeight: '700', 
                     color: 'var(--mobile-muted)' 
                   }}>
-                    Future Rent: ₹{formatCurrency(Math.round(Number(rent) + (Number(rent) * Number(scheduledRaisePercent)) / 100))} (after 11 months)
+                    Future Rent: ₹{formatCurrency(Math.round(Number(rent) + (Number(rent) * Number(scheduledRaisePercent)) / 100))} (after 12 months)
                   </div>
                 )}
               </div>

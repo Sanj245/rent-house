@@ -15,8 +15,24 @@ export default function MobileRentLedger({
   properties,
   ledger,
   updatePaymentStatus,
-  updateTenantNotes
+  updateTenantNotes,
+  highlightedTenantId,
+  setHighlightedTenantId
 }) {
+  useEffect(() => {
+    if (highlightedTenantId) {
+      const element = document.getElementById(`mobile-ledger-card-${highlightedTenantId}`);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const timer = setTimeout(() => {
+            if (setHighlightedTenantId) setHighlightedTenantId(null);
+          }, 3000);
+          return () => clearTimeout(timer);
+        }, 150);
+      }
+    }
+  }, [highlightedTenantId, setHighlightedTenantId]);
   const monthsBase = [
     { name: 'January',   key: 'Jan', index: 1  },
     { name: 'February',  key: 'Feb', index: 2  },
@@ -113,7 +129,7 @@ export default function MobileRentLedger({
         const raiseAbsoluteIndex = (raiseYear - 2020) * 12 + raiseMonth;
         const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
         if (selectedAbsoluteIndex < raiseAbsoluteIndex) return baseRent;
-        const raisePercent = Number(tenant.scheduledRaisePercent || 10);
+        const raisePercent = Number(tenant.scheduledRaisePercent || 5);
         return baseRent + Math.round((baseRent * raisePercent) / 100);
       }
     }
@@ -468,14 +484,22 @@ export default function MobileRentLedger({
             const isPartial = statusText === 'Partial';
 
             return (
-              <div key={tenant.id} style={{
-                backgroundColor: 'var(--mobile-card-bg)',
-                borderRadius: '14px',
-                border: '1px solid var(--mobile-border)',
-                borderLeft: `4px solid ${statusColor}`,
-                overflow: 'hidden',
-                opacity: isAvailable ? 1 : 0.55
-              }}>
+              <div 
+                key={tenant.id} 
+                id={`mobile-ledger-card-${tenant.id}`}
+                style={{
+                  backgroundColor: tenant.id === highlightedTenantId ? 'rgba(212, 163, 115, 0.05)' : 'var(--mobile-card-bg)',
+                  borderRadius: '14px',
+                  border: tenant.id === highlightedTenantId ? '1px solid var(--mobile-secondary)' : '1px solid var(--mobile-border)',
+                  borderLeft: `4px solid ${statusColor}`,
+                  overflow: 'hidden',
+                  opacity: isAvailable ? 1 : 0.55,
+                  transition: 'all 0.4s ease',
+                  ...(tenant.id === highlightedTenantId ? {
+                    boxShadow: '0 0 15px rgba(212, 163, 115, 0.4)'
+                  } : {})
+                }}
+              >
                 {/* Card header — Tenant + Property + Status badge */}
                 <div style={{ padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--mobile-border)' }}>
                   <div>

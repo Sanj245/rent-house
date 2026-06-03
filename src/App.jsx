@@ -33,6 +33,7 @@ export default function App() {
   const [tenants, setTenants]       = useState([]);
   const [ledger, setLedger]         = useState({});
   const [syncStatus, setSyncStatus] = useState('connecting'); // 'live' | 'offline' | 'connecting'
+  const [highlightedTenantId, setHighlightedTenantId] = useState(null);
 
   // Always-current ref — avoids stale closures in action functions
   const stateRef = useRef({ properties: [], tenants: [], ledger: {}, pastTenants: [] });
@@ -558,6 +559,7 @@ export default function App() {
     setProperties(newProperties);
     setLedger(newLedger);
     saveToFirestore({ tenants: newTenants, properties: newProperties, ledger: newLedger });
+    setHighlightedTenantId(tenantId);
     setCurrentTab('tenants');
   };
 
@@ -623,6 +625,7 @@ export default function App() {
     });
     setTenants(newTenants);
     saveToFirestore({ tenants: newTenants });
+    setHighlightedTenantId(tenantId);
     setCurrentTab('tenants');
   };
 
@@ -639,6 +642,7 @@ export default function App() {
     };
     setLedger(newLedger);
     saveToFirestore({ ledger: newLedger });
+    setHighlightedTenantId(tenantId);
     setCurrentTab('ledger');
   };
 
@@ -653,6 +657,7 @@ export default function App() {
     const newTenants = stateRef.current.tenants.map((t) => t.id === tenantId ? { ...t, ...updatedTenant } : t);
     setTenants(newTenants);
     saveToFirestore({ tenants: newTenants });
+    setHighlightedTenantId(tenantId);
     setCurrentTab('tenants');
   };
 
@@ -717,6 +722,8 @@ export default function App() {
         updateTenantNotes={updateTenantNotes}
         handleExportData={handleExportData}
         requestNotificationPermission={requestNotificationPermission}
+        highlightedTenantId={highlightedTenantId}
+        setHighlightedTenantId={setHighlightedTenantId}
       />
     );
   }
@@ -833,10 +840,10 @@ export default function App() {
             <PropertyManager properties={properties} tenants={tenants} addProperty={addProperty} editProperty={editProperty} deleteProperty={deleteProperty} />
           )}
           {currentTab === 'tenants' && (
-            <TenantManager tenants={tenants} properties={properties} ledger={ledger} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} editTenant={editTenant} />
+            <TenantManager tenants={tenants} properties={properties} ledger={ledger} addTenant={addTenant} removeTenant={removeTenant} updateTenantRent={scheduleRentRaise} editTenant={editTenant} highlightedTenantId={highlightedTenantId} setHighlightedTenantId={setHighlightedTenantId} />
           )}
           {currentTab === 'ledger' && (
-            <RentLedger tenants={tenants} properties={properties} ledger={ledger} updatePaymentStatus={updatePaymentStatus} updateTenantNotes={updateTenantNotes} />
+            <RentLedger tenants={tenants} properties={properties} ledger={ledger} updatePaymentStatus={updatePaymentStatus} updateTenantNotes={updateTenantNotes} highlightedTenantId={highlightedTenantId} setHighlightedTenantId={setHighlightedTenantId} />
           )}
           {currentTab === 'history' && (
             <TenancyHistory properties={properties} tenants={tenants} pastTenants={pastTenants} ledger={ledger} />

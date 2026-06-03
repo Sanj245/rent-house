@@ -26,8 +26,24 @@ export default function TenantManager({
   addTenant, 
   removeTenant, 
   updateTenantRent,
-  editTenant
+  editTenant,
+  highlightedTenantId,
+  setHighlightedTenantId
 }) {
+  React.useEffect(() => {
+    if (highlightedTenantId) {
+      const element = document.getElementById(`tenant-card-${highlightedTenantId}`);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const timer = setTimeout(() => {
+            if (setHighlightedTenantId) setHighlightedTenantId(null);
+          }, 3000);
+          return () => clearTimeout(timer);
+        }, 150);
+      }
+    }
+  }, [highlightedTenantId, setHighlightedTenantId]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState(null);
   
@@ -153,11 +169,11 @@ export default function TenantManager({
     const todayStr = today.toISOString().split('T')[0];
     setMoveInDate(todayStr);
 
-    // Default raise effective date to exactly 11 months from today
-    const elevenMonthsLater = new Date();
-    elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
-    const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
-    setScheduledRaiseEffectiveDate(elevenMonthsLaterStr);
+    // Default raise effective date to exactly 12 months from today
+    const twelveMonthsLater = new Date();
+    twelveMonthsLater.setMonth(twelveMonthsLater.getMonth() + 12);
+    const twelveMonthsLaterStr = twelveMonthsLater.toISOString().split('T')[0];
+    setScheduledRaiseEffectiveDate(twelveMonthsLaterStr);
 
     setIsModalOpen(true);
   };
@@ -184,11 +200,11 @@ export default function TenantManager({
     setSelectedTenant(tenant);
     setNewRaisePercent('5');
     
-    // Default reschedule raise effective date to 11 months from now
-    const elevenMonthsLater = new Date();
-    elevenMonthsLater.setMonth(elevenMonthsLater.getMonth() + 11);
-    const elevenMonthsLaterStr = elevenMonthsLater.toISOString().split('T')[0];
-    setEffectiveDate(elevenMonthsLaterStr);
+    // Default reschedule raise effective date to 12 months from now
+    const twelveMonthsLater = new Date();
+    twelveMonthsLater.setMonth(twelveMonthsLater.getMonth() + 12);
+    const twelveMonthsLaterStr = twelveMonthsLater.toISOString().split('T')[0];
+    setEffectiveDate(tenant.scheduledRaiseEffectiveDate || twelveMonthsLaterStr);
     
     setIsRentModalOpen(true);
   };
@@ -256,7 +272,7 @@ export default function TenantManager({
     if (!dateStr) return '';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return '';
-    date.setMonth(date.getMonth() + 11);
+    date.setMonth(date.getMonth() + 12);
     return date.toISOString().split('T')[0];
   };
 
@@ -365,7 +381,21 @@ export default function TenantManager({
             const preview = getRaisePreview(tenant.rent, tenant.scheduledRaisePercent);
 
             return (
-              <div key={tenant.id} className="item-card" style={{ borderLeft: '4px solid var(--color-secondary)' }}>
+              <div 
+                key={tenant.id} 
+                id={`tenant-card-${tenant.id}`}
+                className="item-card" 
+                style={{ 
+                  borderLeft: '4px solid var(--color-secondary)',
+                  transition: 'all 0.4s ease',
+                  ...(tenant.id === highlightedTenantId ? {
+                    boxShadow: '0 0 20px var(--color-secondary-glow)',
+                    borderColor: 'var(--color-secondary)',
+                    transform: 'scale(1.01)',
+                    backgroundColor: 'rgba(212, 163, 115, 0.05)'
+                  } : {})
+                }}
+              >
                 {/* Visual Notebook Dossier Tab */}
                 <div className="card-folder-tab tab-dossier">
                   👥 Dossier
@@ -626,7 +656,7 @@ export default function TenantManager({
                       fontWeight: '700', 
                       marginBottom: '4px' 
                     }}>
-                      {tenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase (11 Months):'}
+                      {tenant.raiseApplied ? '✅ Rent Raise Applied' : '📈 Scheduled Rent Increase (12 Months):'}
                     </h4>
                     
                     {tenant.raiseApplied ? (
@@ -888,10 +918,10 @@ export default function TenantManager({
                 marginBottom: '16px' 
               }}>
                 <h4 style={{ fontSize: '0.95rem', color: 'var(--color-secondary)', fontWeight: '700', marginBottom: '6px' }}>
-                  📈 Schedule Automatic Rent Increase (11 Months)
+                  📈 Schedule Automatic Rent Increase (12 Months)
                 </h4>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                  The monthly rent will automatically increase by the following percentage exactly **11 months** from move-in:
+                  The monthly rent will automatically increase by the following percentage exactly **12 months** from move-in:
                 </p>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -919,7 +949,7 @@ export default function TenantManager({
                     <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>
                       ₹{formatCurrency(getRaisePreview(rent, scheduledRaisePercent).newRent)}
                     </span>{' '}
-                    (Increase of +₹{formatCurrency(getRaisePreview(rent, scheduledRaisePercent).raise)} after 11 months)
+                    (Increase of +₹{formatCurrency(getRaisePreview(rent, scheduledRaisePercent).raise)} after 12 months)
                   </div>
                 )}
               </div>
