@@ -119,36 +119,60 @@ export default function MobileRentLedger({
     const payData = getPaymentData(tenantPayments, monthKey, year);
     if (payData && typeof payData === 'object' && payData.rentDue !== undefined) return payData.rentDue;
 
-    const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
-    const raisePercent = Number(tenant.scheduledRaisePercent || 5);
-
-    if (!tenant.scheduledRaiseEffectiveDate || !tenant.moveInDate) {
-      return baseRent;
-    }
-
-    const moveInParts = tenant.moveInDate.split('-');
-    if (moveInParts.length < 2) return baseRent;
-    const moveInYear = parseInt(moveInParts[0], 10);
-    const moveInMonth = parseInt(moveInParts[1], 10);
-
     const selectedMonthIndex = monthsBase.find(m => m.key === monthKey)?.index || 12;
-
-    const moveInAbs = moveInYear * 12 + (moveInMonth - 1);
     const selectedAbs = year * 12 + (selectedMonthIndex - 1);
 
-    if (selectedAbs < moveInAbs) {
-      return baseRent;
+    const today = new Date();
+    const currentAbs = today.getFullYear() * 12 + today.getMonth();
+
+    if (selectedAbs <= currentAbs) {
+      // Past or present month: look up from rentHistory
+      const history = tenant.rentHistory || [];
+      let activeRecord = null;
+      let activeAbs = -1;
+
+      history.forEach(record => {
+        if (!record.date) return;
+        const parts = record.date.split('-');
+        if (parts.length < 2) return;
+        const rYear = parseInt(parts[0], 10);
+        const rMonth = parseInt(parts[1], 10);
+        const recordAbs = rYear * 12 + (rMonth - 1);
+
+        if (recordAbs <= selectedAbs && recordAbs > activeAbs) {
+          activeAbs = recordAbs;
+          activeRecord = record;
+        }
+      });
+
+      if (activeRecord) {
+        return Number(activeRecord.amount);
+      }
+      return tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
+    } else {
+      // Future month: project forward starting from current rent and next scheduled raise effective date
+      const currentRent = Number(tenant.rent);
+      const raisePercent = Number(tenant.scheduledRaisePercent || 5);
+      if (!tenant.scheduledRaiseEffectiveDate) {
+        return currentRent;
+      }
+      const parts = tenant.scheduledRaiseEffectiveDate.split('-');
+      if (parts.length < 2) return currentRent;
+      const raiseYear = parseInt(parts[0], 10);
+      const raiseMonth = parseInt(parts[1], 10);
+      const nextRaiseAbs = raiseYear * 12 + (raiseMonth - 1);
+
+      if (selectedAbs < nextRaiseAbs) {
+        return currentRent;
+      }
+
+      const periods = 1 + Math.floor((selectedAbs - nextRaiseAbs) / 12);
+      let projectedRent = currentRent;
+      for (let i = 0; i < periods; i++) {
+        projectedRent = projectedRent + Math.round((projectedRent * raisePercent) / 100);
+      }
+      return projectedRent;
     }
-
-    const monthsElapsed = selectedAbs - moveInAbs;
-    const periods = Math.floor(monthsElapsed / 12);
-
-    let currentRent = baseRent;
-    for (let i = 0; i < periods; i++) {
-      currentRent = currentRent + Math.round((currentRent * raisePercent) / 100);
-    }
-
-    return currentRent;
   };
 
   const isMonthAvailable = (moveInDateStr, timelineKey) => {

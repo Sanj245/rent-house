@@ -297,7 +297,7 @@ export default function TenantManager({
       aadharFile,
       photo,
       scheduledRaisePercent: Number(scheduledRaisePercent),
-      scheduledRaiseEffectiveDate: calculateRentRaiseDate(moveInDate),
+      scheduledRaiseEffectiveDate: editingTenant ? (editingTenant.scheduledRaiseEffectiveDate || calculateRentRaiseDate(moveInDate)) : calculateRentRaiseDate(moveInDate),
       raiseApplied: editingTenant ? editingTenant.raiseApplied : false,
       rentHistory: editingTenant ? (editingTenant.rentHistory || [{ date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }]) : [
         { date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }

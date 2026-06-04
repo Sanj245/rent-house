@@ -351,9 +351,16 @@ export default function App() {
       }
     }
 
-    // 2. Unpaid Rent Notification (if unpaid after 10 days of the month have passed)
-    const eleventhOfDay = new Date(y, m, 11);
+    // 2. Unpaid Rent Notification (Check previous month's unpaid status if today is on or after 11th of current month)
+    const prevMonthIndex = currentMonthIndex === 0 ? 11 : currentMonthIndex - 1;
+    const prevYear = currentMonthIndex === 0 ? currentYear - 1 : currentYear;
+
+    const eleventhOfDay = new Date(currentYear, currentMonthIndex, 11);
     if (today >= eleventhOfDay) {
+      const prevMonthKey = monthsKeysList[prevMonthIndex];
+      const prevMonthName = monthsNamesList[prevMonthIndex];
+      const prevTimelineKey = `${prevMonthKey}-${prevYear}`;
+
       const unpaidTenantsForMonth = [];
       tenants.forEach((t) => {
         if (t.moveInDate) {
@@ -361,14 +368,14 @@ export default function App() {
           const moveInYear = parseInt(parts[0], 10);
           const moveInMonth = parseInt(parts[1], 10);
           const moveInAbs = (moveInYear - startYear) * 12 + (moveInMonth - 1);
-          const currentAbs = (y - startYear) * 12 + m;
-          if (moveInAbs > currentAbs) return;
+          const prevMonthAbs = (prevYear - startYear) * 12 + prevMonthIndex;
+          if (moveInAbs > prevMonthAbs) return;
         }
 
         const tenantPayments = ledger[t.id] || {};
-        const payData = tenantPayments[timelineKey] !== undefined
-          ? tenantPayments[timelineKey]
-          : (y === 2026 ? tenantPayments[monthKey] : undefined);
+        const payData = tenantPayments[prevTimelineKey] !== undefined
+          ? tenantPayments[prevTimelineKey]
+          : (prevYear === 2026 ? tenantPayments[prevMonthKey] : undefined);
 
         let isUnpaid = !payData;
         if (payData) {
@@ -384,8 +391,8 @@ export default function App() {
 
       if (unpaidTenantsForMonth.length > 0) {
         triggerSystemNotification(
-          `unpaid-group-${timelineKey}`,
-          `🚨 Unpaid Rent | ${monthName} ${y}`,
+          `unpaid-group-${prevTimelineKey}`,
+          `🚨 Unpaid Rent | ${prevMonthName} ${prevYear}`,
           `tenants not paid: ${unpaidTenantsForMonth.join(', ')}`
         );
       }
@@ -410,16 +417,15 @@ export default function App() {
     const startAbsolute = 0;
     const currentAbsolute = (currentYear - startYear) * 12 + currentMonthIndex;
 
-    // 1. Grouped Unpaid Rent Alerts by Month (after 10 days of the month have passed)
-    for (let abs = startAbsolute; abs <= currentAbsolute; abs++) {
-      const y = startYear + Math.floor(abs / 12);
-      const m = abs % 12;
-      const monthKey = monthsKeysList[m];
-      const monthName = monthsNamesList[m];
-      const timelineKey = `${monthKey}-${y}`;
+    // 1. Grouped Unpaid Rent Alerts by Month: Check only previous month's unpaid status on or after 11th of current month
+    const prevMonthIndex = currentMonthIndex === 0 ? 11 : currentMonthIndex - 1;
+    const prevYear = currentMonthIndex === 0 ? currentYear - 1 : currentYear;
 
-      const eleventhOfDay = new Date(y, m, 11);
-      if (today < eleventhOfDay) continue;
+    const eleventhOfDay = new Date(currentYear, currentMonthIndex, 11);
+    if (today >= eleventhOfDay) {
+      const prevMonthKey = monthsKeysList[prevMonthIndex];
+      const prevMonthName = monthsNamesList[prevMonthIndex];
+      const prevTimelineKey = `${prevMonthKey}-${prevYear}`;
 
       const unpaidTenantsForMonth = [];
       tenants.forEach((t) => {
@@ -428,13 +434,14 @@ export default function App() {
           const moveInYear = parseInt(parts[0], 10);
           const moveInMonth = parseInt(parts[1], 10);
           const moveInAbs = (moveInYear - startYear) * 12 + (moveInMonth - 1);
-          if (moveInAbs > abs) return;
+          const prevMonthAbs = (prevYear - startYear) * 12 + prevMonthIndex;
+          if (moveInAbs > prevMonthAbs) return;
         }
 
         const tenantPayments = ledger[t.id] || {};
-        const payData = tenantPayments[timelineKey] !== undefined
-          ? tenantPayments[timelineKey]
-          : (y === 2026 ? tenantPayments[monthKey] : undefined);
+        const payData = tenantPayments[prevTimelineKey] !== undefined
+          ? tenantPayments[prevTimelineKey]
+          : (prevYear === 2026 ? tenantPayments[prevMonthKey] : undefined);
 
         let isUnpaid = !payData;
         if (payData) {
@@ -450,11 +457,11 @@ export default function App() {
 
       if (unpaidTenantsForMonth.length > 0) {
         list.push({
-          id: `unpaid-group-${timelineKey}`,
-          title: `🚨 Unpaid Rent | ${monthName} ${y}`,
+          id: `unpaid-group-${prevTimelineKey}`,
+          title: `🚨 Unpaid Rent | ${prevMonthName} ${prevYear}`,
           message: `tenants not paid: ${unpaidTenantsForMonth.join(', ')}`,
           type: 'due',
-          date: `${y}-${String(m + 1).padStart(2, '0')}-11`
+          date: `${prevYear}-${String(prevMonthIndex + 1).padStart(2, '0')}-11`
         });
       }
     }

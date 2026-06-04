@@ -402,7 +402,7 @@ export default function MobileTenantManager({
       aadharFile,
       photo,
       scheduledRaisePercent: Number(scheduledRaisePercent),
-      scheduledRaiseEffectiveDate: calculateRentRaiseDate(moveInDate),
+      scheduledRaiseEffectiveDate: (activeSheet === 'edit-tenant' && editingTenant) ? (editingTenant.scheduledRaiseEffectiveDate || calculateRentRaiseDate(moveInDate)) : calculateRentRaiseDate(moveInDate),
       raiseApplied: activeSheet === 'edit-tenant' && editingTenant ? editingTenant.raiseApplied : false,
       rentHistory: activeSheet === 'edit-tenant' && editingTenant ? (editingTenant.rentHistory || [{ date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }]) : [
         { date: moveInDate, amount: Number(rent), reason: 'Starting Rent' }
