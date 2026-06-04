@@ -12,16 +12,17 @@ export default function RentLedger({
 }) {
   React.useEffect(() => {
     if (highlightedTenantId) {
-      const element = document.getElementById(`ledger-row-${highlightedTenantId}`);
-      if (element) {
-        setTimeout(() => {
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`ledger-row-${highlightedTenantId}`);
+        if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const timer = setTimeout(() => {
-            if (setHighlightedTenantId) setHighlightedTenantId(null);
-          }, 3000);
-          return () => clearTimeout(timer);
-        }, 150);
-      }
+        }
+        const resetTimer = setTimeout(() => {
+          if (setHighlightedTenantId) setHighlightedTenantId(null);
+        }, 3000);
+        return () => clearTimeout(resetTimer);
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [highlightedTenantId, setHighlightedTenantId]);
   const monthsBase = [
@@ -121,30 +122,39 @@ export default function RentLedger({
       return payData.rentDue;
     }
 
-    const monthIndex = monthsBase.find(m => m.key === monthKey)?.index || 12;
-    const selectedAbsoluteIndex = (year - 2020) * 12 + monthIndex;
-    
-    if (tenant.scheduledRaiseEffectiveDate) {
-      const parts = tenant.scheduledRaiseEffectiveDate.split('-');
-      if (parts.length >= 2) {
-        const raiseYear = parseInt(parts[0], 10);
-        const raiseMonth = parseInt(parts[1], 10);
-        const raiseAbsoluteIndex = (raiseYear - 2020) * 12 + raiseMonth;
-        
-        const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
-        
-        if (selectedAbsoluteIndex < raiseAbsoluteIndex) {
-          // Month prior to scheduled increase
-          return baseRent;
-        } else {
-          // Month on or after scheduled increase
-          const raisePercent = Number(tenant.scheduledRaisePercent || 5);
-          const raiseAmt = Math.round((baseRent * raisePercent) / 100);
-          return baseRent + raiseAmt;
-        }
-      }
+    const baseRent = tenant.rentHistory && tenant.rentHistory[0] ? Number(tenant.rentHistory[0].amount) : Number(tenant.rent);
+    const raisePercent = Number(tenant.scheduledRaisePercent || 5);
+
+    // If no scheduled raise date or move-in date, return current base rent
+    if (!tenant.scheduledRaiseEffectiveDate || !tenant.moveInDate) {
+      return baseRent;
     }
-    return tenant.rent;
+
+    // Calculate absolute month index for move-in and selected month
+    const moveInParts = tenant.moveInDate.split('-');
+    if (moveInParts.length < 2) return baseRent;
+    const moveInYear = parseInt(moveInParts[0], 10);
+    const moveInMonth = parseInt(moveInParts[1], 10);
+
+    const selectedMonthIndex = monthsBase.find(m => m.key === monthKey)?.index || 12;
+
+    const moveInAbs = moveInYear * 12 + (moveInMonth - 1);
+    const selectedAbs = year * 12 + (selectedMonthIndex - 1);
+
+    if (selectedAbs < moveInAbs) {
+      return baseRent;
+    }
+
+    // Number of 12-month periods elapsed since move-in month
+    const monthsElapsed = selectedAbs - moveInAbs;
+    const periods = Math.floor(monthsElapsed / 12);
+
+    let currentRent = baseRent;
+    for (let i = 0; i < periods; i++) {
+      currentRent = currentRent + Math.round((currentRent * raisePercent) / 100);
+    }
+
+    return currentRent;
   };
 
   const isMonthAvailable = (moveInDateStr, timelineKey) => {
@@ -306,6 +316,7 @@ export default function RentLedger({
     const activeList = [];
     const [selectedMonthKey, selectedYearStr] = selectedTimelineKey.split('-');
     const selectedYear = parseInt(selectedYearStr, 10);
+    const selectedMonthIndex = monthsBase.find(m => m.key === selectedMonthKey)?.index || 12;
     
     tenants.forEach(t => {
       if (t.scheduledRaiseEffectiveDate) {
@@ -314,19 +325,18 @@ export default function RentLedger({
           const raiseYear = parseInt(parts[0], 10);
           const raiseMonth = parseInt(parts[1], 10);
           
-          // Rent collection month for this raise is the next month
-          let collectMonthIndex = raiseMonth;
-          let collectYear = raiseYear;
-          const collectMonthKey = monthsBase.find(m => m.index === collectMonthIndex)?.key || '';
-          
-          if (selectedMonthKey === collectMonthKey && selectedYear === collectYear) {
-            const baseRent = t.rentHistory && t.rentHistory[0] ? Number(t.rentHistory[0].amount) : Number(t.rent);
+          if (selectedMonthKey === (monthsBase.find(m => m.index === raiseMonth)?.key || '') && selectedYear === raiseYear) {
             const raisedRent = getRentForMonth(t, selectedTimelineKey);
+            const prevMonthIndex = selectedMonthIndex === 1 ? 12 : selectedMonthIndex - 1;
+            const prevYear = selectedMonthIndex === 1 ? selectedYear - 1 : selectedYear;
+            const prevMonthKey = monthsBase.find(m => m.index === prevMonthIndex)?.key || '';
+            const oldRent = getRentForMonth(t, `${prevMonthKey}-${prevYear}`);
+            
             activeList.push({
               tenantName: t.name,
               propertyName: getPropertyName(t.propertyId),
-              percent: t.scheduledRaisePercent,
-              oldRent: baseRent,
+              percent: t.scheduledRaisePercent || 5,
+              oldRent,
               newRent: raisedRent,
               effectiveDate: t.scheduledRaiseEffectiveDate
             });

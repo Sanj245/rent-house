@@ -45,29 +45,49 @@ export default function App() {
   const houseCode = localStorage.getItem('rentarc_house_code') || '';
   const [showHouseSetup, setShowHouseSetup] = useState(!houseCode);
 
-  // ─── 11-Month Raise Engine ────────────────────────────────────────────────
+  // ─── 12-Month Raise Engine (Recurring) ────────────────────────────────────
   const checkTenantsRaise = (initialTenants) => {
     const todayStr = new Date().toISOString().split('T')[0];
     let updated = false;
     const checkedTenants = initialTenants.map((t) => {
       let temp = { ...t };
       let changed = false;
-      if (
-        temp.scheduledRaiseEffectiveDate &&
-        todayStr >= temp.scheduledRaiseEffectiveDate &&
-        !temp.raiseApplied
-      ) {
-        const raiseAmt = Math.round((Number(temp.rent) * Number(temp.scheduledRaisePercent)) / 100);
-        const newRent  = Number(temp.rent) + raiseAmt;
-        const history  = temp.rentHistory || [{ date: temp.moveInDate, amount: temp.rent, reason: 'Starting Rent' }];
-        temp.rent        = newRent;
-        temp.raiseApplied = true;
-        temp.rentHistory  = [
-          ...history,
-          { date: temp.scheduledRaiseEffectiveDate, amount: newRent, reason: `Automatic ${temp.scheduledRaisePercent}% Raise Applied` },
-        ];
+
+      // Transition legacy one-time raise to recurring raise schedule
+      if (temp.raiseApplied) {
+        if (temp.scheduledRaiseEffectiveDate) {
+          const currentDate = new Date(temp.scheduledRaiseEffectiveDate);
+          currentDate.setMonth(currentDate.getMonth() + 12);
+          temp.scheduledRaiseEffectiveDate = currentDate.toISOString().split('T')[0];
+        }
+        temp.raiseApplied = false;
         changed = true;
       }
+
+      // Automatically apply recurring rent raises if their scheduled dates are in the past/today
+      while (
+        temp.scheduledRaiseEffectiveDate &&
+        todayStr >= temp.scheduledRaiseEffectiveDate
+      ) {
+        const raisePercent = Number(temp.scheduledRaisePercent || 5);
+        const raiseAmt = Math.round((Number(temp.rent) * raisePercent) / 100);
+        const newRent  = Number(temp.rent) + raiseAmt;
+        const history  = temp.rentHistory || [{ date: temp.moveInDate, amount: temp.rent, reason: 'Starting Rent' }];
+        
+        temp.rent = newRent;
+        temp.rentHistory = [
+          ...history,
+          { date: temp.scheduledRaiseEffectiveDate, amount: newRent, reason: `Automatic ${raisePercent}% Raise Applied` }
+        ];
+
+        // Advance to next 12-month raise cycle
+        const currentDate = new Date(temp.scheduledRaiseEffectiveDate);
+        currentDate.setMonth(currentDate.getMonth() + 12);
+        temp.scheduledRaiseEffectiveDate = currentDate.toISOString().split('T')[0];
+        
+        changed = true;
+      }
+
       if (changed) updated = true;
       return temp;
     });

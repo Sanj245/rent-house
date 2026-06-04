@@ -32,16 +32,17 @@ export default function TenantManager({
 }) {
   React.useEffect(() => {
     if (highlightedTenantId) {
-      const element = document.getElementById(`tenant-card-${highlightedTenantId}`);
-      if (element) {
-        setTimeout(() => {
+      const timer = setTimeout(() => {
+        const element = document.getElementById(`tenant-card-${highlightedTenantId}`);
+        if (element) {
           element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          const timer = setTimeout(() => {
-            if (setHighlightedTenantId) setHighlightedTenantId(null);
-          }, 3000);
-          return () => clearTimeout(timer);
-        }, 150);
-      }
+        }
+        const resetTimer = setTimeout(() => {
+          if (setHighlightedTenantId) setHighlightedTenantId(null);
+        }, 3000);
+        return () => clearTimeout(resetTimer);
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [highlightedTenantId, setHighlightedTenantId]);
   const [isModalOpen, setIsModalOpen] = useState(false);
